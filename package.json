@@ -1,0 +1,19 @@
+{
+  "name": "cto-docsign",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Cryptool DocSign — secure document sharing, view analytics, and audit-trail e-signatures. Runs standalone at docsign.cryptool.io.",
+  "scripts": {
+    "install:all": "npm --prefix server install && npm --prefix web install",
+    "build": "npm --prefix web run build",
+    "start": "npm --prefix server start",
+    "dev:server": "npm --prefix server run dev",
+    "dev:web": "npm --prefix web run dev",
+    "migrate": "npm --prefix server run migrate",
+    "check": "node --check server/src/app.js",
+    "deploy:pm2": "npm run install:all && npm --prefix server run migrate && npm run build && pm2 restart docsign-server || pm2 start ecosystem.config.cjs"
+  },
+  "engines": {
+    "node": ">=20.11.0"
+  }
+}

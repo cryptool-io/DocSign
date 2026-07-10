@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "docsign",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["src/app.js"],
+      "cwd": "server",
+      "port": 4400
+    }
+  ]
+}

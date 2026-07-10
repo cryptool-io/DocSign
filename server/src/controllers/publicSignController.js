@@ -1,0 +1,343 @@
+const {
+  DocEnvelope,
+  DocEnvelopeSigner,
+  DocSignatureField,
+  DocDocument,
+  sequelize
+} = require('../models');
+const storage = require('../services/docroom/storage');
+const {
+  generateOtpCode,
+  hashOtpCode,
+  verifyOtpCode,
+  issueSignerToken,
+  verifySignerToken
+} = require('../services/docroom/tokens');
+const { appendAuditEvent } = require('../services/docroom/hashChain');
+const { finalizeEnvelope } = require('../services/docroom/completion');
+const { signerOtp, envelopeCompleted } = require('../services/email');
+const { asyncHandler, notFound, badRequest, forbidden, unauthorized, tooMany, clientIp } = require('../utils/http');
+
+const OTP_TTL_MS = 10 * 60 * 1000;
+const OTP_MAX_ATTEMPTS = 5;
+
+// Resolve a signer + envelope from the opaque access token in the URL.
+const loadSignerByAccessToken = async (token) => {
+  const signer = await DocEnvelopeSigner.scope('withSecrets').findOne({ where: { AccessToken: token } });
+  if (!signer) throw notFound('This signing link is not valid.');
+  const env = await DocEnvelope.findByPk(signer.DocEnvelopeId);
+  if (!env) throw notFound('Envelope not found.');
+  return { signer, env };
+};
+
+const assertSignable = (env, signer) => {
+  if (['voided', 'declined', 'expired'].includes(env.Status)) {
+    throw forbidden(`This document has been ${env.Status}.`, env.Status);
+  }
+  if (env.ExpiresAt && new Date(env.ExpiresAt) <= new Date()) throw forbidden('This request has expired.', 'expired');
+  if (signer.Status === 'signed') throw forbidden('You have already signed this document.', 'already_signed');
+  if (signer.Status === 'declined') throw forbidden('You have declined this document.', 'declined');
+};
+
+// Sequential order: a signer can't act until everyone before them has signed.
+const isSignerTurn = async (env, signer) => {
+  if (env.SigningOrder !== 'sequential') return true;
+  const ahead = await DocEnvelopeSigner.count({
+    where: {
+      DocEnvelopeId: env.id,
+      SigningOrder: { [sequelize.Sequelize.Op.lt]: signer.SigningOrder },
+      Status: { [sequelize.Sequelize.Op.ne]: 'signed' }
+    }
+  });
+  return ahead === 0;
+};
+
+/** Public: metadata + gate state for a signing link. */
+exports.meta = asyncHandler(async (req, res) => {
+  const { signer, env } = await loadSignerByAccessToken(req.params.token);
+  const doc = await DocDocument.findByPk(env.DocDocumentId);
+  const yourTurn = await isSignerTurn(env, signer);
+  res.json({
+    data: {
+      subject: env.Subject,
+      message: env.Message,
+      status: env.Status,
+      documentName: doc?.Name,
+      pageCount: doc?.PageCount || 0,
+      signer: { name: signer.Name, email: signer.Email, status: signer.Status },
+      emailVerified: Boolean(signer.EmailVerifiedAt),
+      yourTurn,
+      expiresAt: env.ExpiresAt
+    }
+  });
+});
+
+/** Public: send the signer a 6-digit OTP to prove mailbox control. */
+exports.requestOtp = asyncHandler(async (req, res) => {
+  const { signer, env } = await loadSignerByAccessToken(req.params.token);
+  assertSignable(env, signer);
+
+  const code = generateOtpCode();
+  await signer.update({
+    OtpCodeHash: hashOtpCode(code),
+    OtpExpiresAt: new Date(Date.now() + OTP_TTL_MS),
+    OtpAttempts: 0
+  });
+  await signerOtp({ to: signer.Email, code });
+  res.json({ ok: true, email: signer.Email.replace(/(.{2}).*(@.*)/, '$1***$2') });
+});
+
+/** Public: verify the OTP, mark email verified, issue a signer token. */
+exports.verifyOtp = asyncHandler(async (req, res) => {
+  const { signer, env } = await loadSignerByAccessToken(req.params.token);
+  assertSignable(env, signer);
+
+  if (!signer.OtpCodeHash || !signer.OtpExpiresAt || new Date(signer.OtpExpiresAt) < new Date()) {
+    throw badRequest('Your code has expired. Request a new one.', 'otp_expired');
+  }
+  if (signer.OtpAttempts >= OTP_MAX_ATTEMPTS) {
+    throw tooMany('Too many incorrect attempts. Request a new code.', 'otp_locked');
+  }
+  if (!verifyOtpCode(req.body.code, signer.OtpCodeHash)) {
+    await signer.increment('OtpAttempts');
+    throw unauthorized('Incorrect code.', 'otp_incorrect');
+  }
+
+  const ip = clientIp(req);
+  const ua = req.headers['user-agent'] || null;
+  await sequelize.transaction(async (t) => {
+    await signer.update(
+      {
+        EmailVerifiedAt: signer.EmailVerifiedAt || new Date(),
+        OtpCodeHash: null,
+        OtpExpiresAt: null,
+        Status: signer.Status === 'pending' ? 'viewed' : signer.Status,
+        ViewedAt: signer.ViewedAt || new Date(),
+        IpAddress: ip,
+        UserAgent: ua
+      },
+      { transaction: t }
+    );
+    await appendAuditEvent(
+      {
+        envelopeId: env.id,
+        documentId: env.DocDocumentId,
+        actorType: 'signer',
+        actorId: signer.id,
+        actorEmail: signer.Email,
+        eventType: 'signer.verified',
+        metadata: { signerId: signer.id },
+        ipAddress: ip,
+        userAgent: ua
+      },
+      { transaction: t }
+    );
+  });
+
+  const token = issueSignerToken({ signerId: signer.id, envelopeId: env.id, email: signer.Email });
+  res.json({ data: { signerToken: token } });
+});
+
+// Middleware-ish: require a valid signer token bound to this access token.
+const authorizeSigner = async (req) => {
+  const header = req.headers.authorization || '';
+  const token = header.startsWith('Bearer ') ? header.slice(7) : null;
+  if (!token) throw unauthorized('Verify your email first.', 'no_signer_token');
+  let payload;
+  try {
+    payload = verifySignerToken(token);
+  } catch {
+    throw unauthorized('Your signing session expired. Verify again.', 'signer_expired');
+  }
+  const { signer, env } = await loadSignerByAccessToken(req.params.token);
+  if (payload.signerId !== signer.id) throw forbidden('Token mismatch.');
+  return { signer, env };
+};
+
+/** Authorized: the fields this signer must fill, plus a link to the PDF. */
+exports.fields = asyncHandler(async (req, res) => {
+  const { signer, env } = await authorizeSigner(req);
+  const fields = await DocSignatureField.findAll({
+    where: { DocEnvelopeId: env.id, DocEnvelopeSignerId: signer.id },
+    order: [['PageNumber', 'ASC']]
+  });
+  res.json({
+    data: fields.map((f) => ({
+      id: f.id,
+      type: f.Type,
+      pageNumber: f.PageNumber,
+      x: f.X,
+      y: f.Y,
+      width: f.Width,
+      height: f.Height,
+      required: f.Required,
+      label: f.Label
+    }))
+  });
+});
+
+/** Authorized: stream the PDF to a verified signer. */
+exports.file = asyncHandler(async (req, res) => {
+  const { env } = await authorizeSigner(req);
+  const doc = await DocDocument.findByPk(env.DocDocumentId);
+  const buffer = await storage.getObject(doc.FileKey);
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', 'inline');
+  res.send(buffer);
+});
+
+/**
+ * Authorized: submit the signature. Records consent, writes each field's value,
+ * flips the signer to 'signed', advances sequential order (notifying the next
+ * signer), and finalizes the envelope when everyone has signed.
+ */
+exports.submit = asyncHandler(async (req, res) => {
+  const { signer, env } = await authorizeSigner(req);
+  assertSignable(env, signer);
+  if (!(await isSignerTurn(env, signer))) throw forbidden('It is not your turn to sign yet.', 'not_your_turn');
+
+  const { consent, signatureType, signatureData, values } = req.body;
+  const ip = clientIp(req);
+  const ua = req.headers['user-agent'] || null;
+
+  const fields = await DocSignatureField.findAll({
+    where: { DocEnvelopeId: env.id, DocEnvelopeSignerId: signer.id }
+  });
+  const valueMap = new Map(values.map((v) => [v.fieldId, v.value]));
+
+  // Every required field must be satisfied — either by a submitted value, or by
+  // being a signature/initials/date field the server fills from the signature.
+  for (const f of fields) {
+    const provided = valueMap.get(f.id);
+    const autoFilled = ['signature', 'initials', 'date'].includes(f.Type);
+    if (f.Required && !autoFilled && (provided === undefined || provided === null || provided === '')) {
+      throw badRequest(`Please complete the "${f.Label || f.Type}" field.`, 'missing_field');
+    }
+  }
+
+  const nowIso = new Date().toISOString().slice(0, 10);
+  const typedName = signatureType === 'typed' ? String(signatureData).slice(0, 120) : signer.Name;
+
+  await sequelize.transaction(async (t) => {
+    for (const f of fields) {
+      let value = valueMap.get(f.id) ?? null;
+      if (f.Type === 'signature' || f.Type === 'initials') {
+        // Drawn image is stored on the signer; typed renders the name as text.
+        value = signatureType === 'typed' ? typedName : null;
+      } else if (f.Type === 'date' && !value) {
+        value = nowIso;
+      } else if (f.Type === 'checkbox') {
+        value = value ? 'X' : '';
+      }
+      await f.update({ Value: value }, { transaction: t });
+    }
+
+    await signer.update(
+      {
+        Status: 'signed',
+        SignedAt: new Date(),
+        ConsentedAt: new Date(),
+        SignatureType: signatureType,
+        SignatureImageKey: signatureType === 'drawn' ? signatureData : null,
+        IpAddress: ip,
+        UserAgent: ua
+      },
+      { transaction: t }
+    );
+
+    await appendAuditEvent(
+      {
+        envelopeId: env.id,
+        documentId: env.DocDocumentId,
+        actorType: 'signer',
+        actorId: signer.id,
+        actorEmail: signer.Email,
+        eventType: 'signer.signed',
+        metadata: { signatureType, consent: consent === true },
+        ipAddress: ip,
+        userAgent: ua
+      },
+      { transaction: t }
+    );
+
+    // Are there still signers who haven't signed?
+    const remaining = await DocEnvelopeSigner.count({
+      where: { DocEnvelopeId: env.id, Status: { [sequelize.Sequelize.Op.ne]: 'signed' } },
+      transaction: t
+    });
+    if (remaining > 0 && env.Status === 'sent') {
+      await env.update({ Status: 'partially_signed' }, { transaction: t });
+    }
+  });
+
+  // Post-commit: notify the next sequential signer, or finalize.
+  // withSecrets so the next signer's AccessToken is available for the sign URL.
+  const remaining = await DocEnvelopeSigner.scope('withSecrets').findAll({
+    where: { DocEnvelopeId: env.id, Status: { [sequelize.Sequelize.Op.ne]: 'signed' } }
+  });
+
+  if (remaining.length === 0) {
+    const finalized = await finalizeEnvelope(env.id);
+    // Notify the sender + all signers that it's complete.
+    const owner = await sequelize.models.User.findByPk(env.CreatedBy);
+    const allSigners = await DocEnvelopeSigner.findAll({ where: { DocEnvelopeId: env.id } });
+    const recipients = [owner?.Email, ...allSigners.map((s) => s.Email)].filter(Boolean);
+    await Promise.allSettled(
+      [...new Set(recipients)].map((to) =>
+        envelopeCompleted({ to, subject: `Completed: ${env.Subject}`, downloadUrl: null })
+      )
+    );
+    return res.json({ data: { status: finalized?.Status || 'completed' } });
+  }
+
+  if (env.SigningOrder === 'sequential') {
+    const nextOrder = Math.min(...remaining.map((s) => s.SigningOrder));
+    const next = remaining.filter((s) => s.SigningOrder === nextOrder && !s.NotifiedAt);
+    const { signatureRequest } = require('../services/email');
+    const owner = await sequelize.models.User.findByPk(env.CreatedBy);
+    await Promise.allSettled(
+      next.map((s) =>
+        signatureRequest({
+          to: s.Email,
+          signerName: s.Name,
+          senderName: owner?.Name || 'The sender',
+          subject: env.Subject,
+          message: env.Message,
+          signUrl: `${require('../services/email').APP_BASE_URL}/sign/${s.AccessToken}`
+        }).then(() => s.update({ NotifiedAt: new Date() }))
+      )
+    );
+  }
+
+  res.json({ data: { status: 'signed' } });
+});
+
+/** Public (post-verify): decline to sign. */
+exports.decline = asyncHandler(async (req, res) => {
+  const { signer, env } = await authorizeSigner(req);
+  assertSignable(env, signer);
+  const ip = clientIp(req);
+
+  await sequelize.transaction(async (t) => {
+    await signer.update(
+      { Status: 'declined', DeclinedAt: new Date(), DeclineReason: req.body?.reason || null, IpAddress: ip },
+      { transaction: t }
+    );
+    await env.update({ Status: 'declined' }, { transaction: t });
+    await appendAuditEvent(
+      {
+        envelopeId: env.id,
+        documentId: env.DocDocumentId,
+        actorType: 'signer',
+        actorId: signer.id,
+        actorEmail: signer.Email,
+        eventType: 'signer.declined',
+        metadata: { reason: req.body?.reason || null },
+        ipAddress: ip,
+        userAgent: req.headers['user-agent'] || null
+      },
+      { transaction: t }
+    );
+  });
+  res.json({ data: { status: 'declined' } });
+});

@@ -6,9 +6,11 @@ const links = [
   { to: '/documents', label: 'Documents' },
   { to: '/send', label: 'Send for signature' },
   { to: '/envelopes', label: 'Envelopes' },
+  { to: '/data-rooms', label: 'Data rooms' },
   { to: '/templates', label: 'Templates' },
   { to: '/recipients', label: 'Recipients' },
-  { to: '/projects', label: 'Projects' }
+  { to: '/projects', label: 'Projects' },
+  { to: '/settings', label: 'Settings' }
 ];
 
 export default function Shell() {

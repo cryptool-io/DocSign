@@ -5,13 +5,18 @@ module.exports = (sequelize, DataTypes) => {
   class DocViewSession extends Model {
     static associate(models) {
       DocViewSession.belongsTo(models.DocLink, { foreignKey: 'DocLinkId', as: 'Link' });
+      DocViewSession.belongsTo(models.DocDataRoom, { foreignKey: 'DocDataRoomId', as: 'Room' });
+      DocViewSession.belongsTo(models.DocDocument, { foreignKey: 'DocDocumentId', as: 'Document' });
       DocViewSession.hasMany(models.DocPageView, { foreignKey: 'DocViewSessionId', as: 'PageViews' });
     }
   }
 
   DocViewSession.init(
     {
-      DocLinkId: { type: DataTypes.UUID, allowNull: false },
+      // A session belongs to either a share link, or a data-room + document.
+      DocLinkId: { type: DataTypes.UUID, allowNull: true },
+      DocDataRoomId: { type: DataTypes.UUID, allowNull: true },
+      DocDocumentId: { type: DataTypes.UUID, allowNull: true },
       ViewerEmail: { type: DataTypes.STRING, allowNull: true },
       IpAddress: { type: DataTypes.STRING(45), allowNull: true },
       UserAgent: { type: DataTypes.TEXT, allowNull: true },

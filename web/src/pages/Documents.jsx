@@ -221,6 +221,13 @@ export default function Documents() {
                         <button className="btn sm" onClick={() => nav('/send', { state: { documentId: d.id } })}>
                           Send to sign
                         </button>
+                        <button
+                          className="btn sm"
+                          title="Place reusable signature fields on this document"
+                          onClick={() => nav(`/templates/new?documentId=${d.id}`)}
+                        >
+                          Prepare fields
+                        </button>
                         {dl[0] && (
                           <button className="btn sm" onClick={() => nav(`/links/${dl[0].id}`)}>
                             Analytics

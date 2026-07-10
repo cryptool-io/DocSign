@@ -54,12 +54,14 @@ app.use('/api/recipient-groups', require('./routes/recipientGroupRoutes'));
 app.use('/api/templates', require('./routes/templateRoutes'));
 app.use('/api/links', require('./routes/linkRoutes'));
 app.use('/api/envelopes', require('./routes/envelopeRoutes'));
+app.use('/api/data-rooms', require('./routes/dataRoomRoutes'));
 app.use('/api/analytics', require('./routes/analyticsRoutes'));
 app.use('/api/admin', require('./routes/adminRoutes'));
 
 // Public recipient-facing surface (no app login; own tokens).
 app.use('/api/view', require('./routes/publicViewRoutes'));
 app.use('/api/sign', require('./routes/publicSignRoutes'));
+app.use('/api/room', require('./routes/publicDataRoomRoutes'));
 
 // --- Static SPA (built web/) ---------------------------------------------
 const webDist = path.resolve(__dirname, '../../web/dist');

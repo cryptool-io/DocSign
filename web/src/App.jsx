@@ -16,6 +16,9 @@ import LinkAnalytics from './pages/LinkAnalytics.jsx';
 import Envelopes from './pages/Envelopes.jsx';
 import EnvelopeDetail from './pages/EnvelopeDetail.jsx';
 import SendEnvelope from './pages/SendEnvelope.jsx';
+import Settings from './pages/Settings.jsx';
+import DataRooms from './pages/DataRooms.jsx';
+import PublicDataRoom from './pages/public/PublicDataRoom.jsx';
 
 import PublicView from './pages/public/PublicView.jsx';
 import PublicSign from './pages/public/PublicSign.jsx';
@@ -40,6 +43,7 @@ export default function App() {
         {/* Public recipient surface */}
         <Route path="/v/:token" element={<PublicView />} />
         <Route path="/sign/:token" element={<PublicSign />} />
+        <Route path="/room/:token" element={<PublicDataRoom />} />
 
         {/* Auth */}
         <Route path="/login" element={<Login />} />
@@ -65,6 +69,8 @@ export default function App() {
           <Route path="envelopes" element={<Envelopes />} />
           <Route path="envelopes/:id" element={<EnvelopeDetail />} />
           <Route path="send" element={<SendEnvelope />} />
+          <Route path="data-rooms" element={<DataRooms />} />
+          <Route path="settings" element={<Settings />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />

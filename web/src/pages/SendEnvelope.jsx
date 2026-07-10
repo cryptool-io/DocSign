@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import api, { apiError } from '../lib/api.js';
+import { useCompany } from '../lib/company.js';
 import { Spinner, useToast } from '../lib/ui.jsx';
 import FieldPlacer, { FIELD_TYPES, SIGNER_COLORS } from '../components/FieldPlacer.jsx';
 
@@ -21,13 +22,19 @@ export default function SendEnvelope() {
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
 
+  const { companies, activeId } = useCompany();
   const [projectId, setProjectId] = useState('');
   const [documentId, setDocumentId] = useState(loc.state?.documentId || '');
   const [templateId, setTemplateId] = useState('');
+  const [companyId, setCompanyId] = useState(activeId || '');
+  const [fromEmail, setFromEmail] = useState('');
+  const [deliveryMode, setDeliveryMode] = useState('email');
+  const [requireVerification, setRequireVerification] = useState(false);
   const [subject, setSubject] = useState('');
   const [message, setMessage] = useState('');
   const [order, setOrder] = useState('parallel');
   const [signers, setSigners] = useState([{ name: '', email: '', signerRole: '', signingOrder: 1 }]);
+  const [resultLinks, setResultLinks] = useState(null);
 
   // Inline field placement (DocuSign-style). Each field carries a signerEmail so
   // the backend binds it to the right person; falls back to template fields if
@@ -89,6 +96,17 @@ export default function SendEnvelope() {
     }
   }, [signers]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Selected company drives the send-as address list.
+  const selectedCompany = companies.find((c) => c.id === companyId) || null;
+  useEffect(() => {
+    if (!selectedCompany) {
+      setFromEmail('');
+      return;
+    }
+    const def = selectedCompany.emails.find((e) => e.isDefault) || selectedCompany.emails[0];
+    setFromEmail(def ? def.email : '');
+  }, [companyId]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const filteredDocs = projectId ? docs.filter((d) => d.DocProjectId === projectId) : docs;
   const setSigner = (i, k, v) => setSigners((s) => s.map((row, idx) => (idx === i ? { ...row, [k]: v } : row)));
   const addSigner = () => setSigners((s) => [...s, { name: '', email: '', signerRole: '', signingOrder: s.length + 1 }]);
@@ -143,6 +161,10 @@ export default function SendEnvelope() {
         documentId,
         templateId: templateId || null,
         projectId: projectId || null,
+        companyId: companyId || null,
+        fromEmail: fromEmail || null,
+        deliveryMode,
+        requireVerification: deliveryMode === 'link' ? requireVerification : true,
         subject,
         message: message || null,
         signingOrder: order,
@@ -157,13 +179,19 @@ export default function SendEnvelope() {
         }))
       });
       const envelopeId = data.data.id;
-      if (send) {
-        await api.post(`/envelopes/${envelopeId}/send`);
-        toast('Sent for signature');
-      } else {
+      if (!send) {
         toast('Saved as draft');
+        return nav(`/envelopes/${envelopeId}`);
       }
-      nav(`/envelopes/${envelopeId}`);
+      const sendRes = await api.post(`/envelopes/${envelopeId}/send`);
+      if (deliveryMode === 'link') {
+        // Show the copyable links instead of navigating away.
+        setResultLinks({ envelopeId, links: sendRes.data.links || [] });
+        toast('Signing links ready');
+      } else {
+        toast('Sent for signature');
+        nav(`/envelopes/${envelopeId}`);
+      }
     } catch (err) {
       toast(apiError(err), 'err');
     } finally {
@@ -173,18 +201,68 @@ export default function SendEnvelope() {
 
   if (loading) return <Spinner center />;
 
+  // After a link-mode send: show the copyable per-signer links.
+  if (resultLinks) {
+    return (
+      <>
+        <div className="page-head">
+          <div>
+            <h1>Signing links ready</h1>
+            <p className="muted">No emails were sent. Copy each link and share it however you like.</p>
+          </div>
+          <button className="btn primary" onClick={() => nav(`/envelopes/${resultLinks.envelopeId}`)}>
+            View envelope
+          </button>
+        </div>
+        <div className="card">
+          {resultLinks.links.map((l) => (
+            <div key={l.signerId} className="field">
+              <label>
+                {l.name} · {l.email}
+                {!l.active && <span className="badge amber" style={{ marginLeft: 8 }}>waits their turn</span>}
+              </label>
+              <div className="flex">
+                <input className="input" readOnly value={l.url} onFocus={(e) => e.target.select()} />
+                <button
+                  className="btn"
+                  onClick={() => {
+                    navigator.clipboard?.writeText(l.url);
+                    toast('Copied');
+                  }}
+                >
+                  Copy
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      </>
+    );
+  }
+
   return (
     <>
       <div className="page-head">
         <div>
           <h1>Send for signature</h1>
-          <p className="muted">Select a document and template, then choose who needs to sign.</p>
+          <p className="muted">Select a company, document, and template, then choose who needs to sign.</p>
         </div>
       </div>
 
       <div className="card mb">
         <h2>1 · Document</h2>
         <div className="row">
+          <div className="field">
+            <label>Company</label>
+            <select className="select" value={companyId} onChange={(e) => setCompanyId(e.target.value)}>
+              <option value="">Personal (no company)</option>
+              {companies.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </div>
           <div className="field">
             <label>Project</label>
             <select className="select" value={projectId} onChange={(e) => setProjectId(e.target.value)}>
@@ -360,9 +438,44 @@ export default function SendEnvelope() {
         </div>
       </div>
 
+      <div className="card mb">
+        <h2>5 · Delivery</h2>
+        <div className="row">
+          <div className="field">
+            <label>How to deliver</label>
+            <select className="select" value={deliveryMode} onChange={(e) => setDeliveryMode(e.target.value)}>
+              <option value="email">Email the signer a link</option>
+              <option value="link">Just give me a link to share</option>
+            </select>
+          </div>
+          {selectedCompany && selectedCompany.emails.length > 0 && (
+            <div className="field">
+              <label>Send from</label>
+              <select className="select" value={fromEmail} onChange={(e) => setFromEmail(e.target.value)}>
+                {selectedCompany.emails.map((e) => (
+                  <option key={e.id} value={e.email}>
+                    {selectedCompany.senderName || selectedCompany.name} &lt;{e.email}&gt;
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+        </div>
+        {deliveryMode === 'link' ? (
+          <label className="checkbox">
+            <input type="checkbox" checked={requireVerification} onChange={(e) => setRequireVerification(e.target.checked)} />
+            Require an emailed code before they can sign (leave off for one-click signing)
+          </label>
+        ) : (
+          <p className="muted" style={{ fontSize: 13 }}>
+            The signer gets an email with a secure link and a one-time code to verify their identity.
+          </p>
+        )}
+      </div>
+
       <div className="wrap-actions">
         <button className="btn primary" disabled={sending} onClick={() => submit(true)}>
-          {sending ? 'Sending…' : 'Send for signature'}
+          {sending ? 'Working…' : deliveryMode === 'link' ? 'Create signing link' : 'Send for signature'}
         </button>
         <button className="btn" disabled={sending} onClick={() => submit(false)}>
           Save as draft

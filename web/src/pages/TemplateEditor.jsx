@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import api, { apiError, getAccessToken } from '../lib/api.js';
+import { withCompany } from '../lib/company.js';
 import { Document, Page } from '../lib/pdf.js';
 import { Spinner, useToast } from '../lib/ui.jsx';
 
@@ -136,7 +137,7 @@ export default function TemplateEditor() {
         fields: fields.map(({ _id, id: _ignore, ...f }) => f)
       };
       if (id) await api.patch(`/templates/${id}`, payload);
-      else await api.post('/templates', payload);
+      else await api.post('/templates', withCompany(payload));
       toast('Template saved');
       nav('/templates');
     } catch (err) {

@@ -7,6 +7,7 @@ module.exports = (sequelize, DataTypes) => {
       DocLink.belongsTo(models.User, { foreignKey: 'CreatedBy', as: 'Creator' });
       DocLink.belongsTo(models.DocDocument, { foreignKey: 'DocDocumentId', as: 'Document' });
       DocLink.belongsTo(models.DocProject, { foreignKey: 'DocProjectId', as: 'Project' });
+      DocLink.belongsTo(models.DocCompany, { foreignKey: 'DocCompanyId', as: 'Company' });
       DocLink.belongsTo(models.DocRecipient, { foreignKey: 'DocRecipientId', as: 'Recipient' });
       DocLink.hasMany(models.DocViewSession, { foreignKey: 'DocLinkId', as: 'Sessions' });
       DocLink.hasMany(models.DocAuditEvent, { foreignKey: 'DocLinkId', as: 'AuditEvents' });
@@ -50,6 +51,7 @@ module.exports = (sequelize, DataTypes) => {
     {
       DocDocumentId: { type: DataTypes.UUID, allowNull: false },
       DocProjectId: { type: DataTypes.UUID, allowNull: true },
+      DocCompanyId: { type: DataTypes.UUID, allowNull: true },
       DocRecipientId: { type: DataTypes.UUID, allowNull: true },
       CreatedBy: { type: DataTypes.UUID, allowNull: false },
       Token: { type: DataTypes.STRING, allowNull: false, unique: true },

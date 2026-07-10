@@ -1,10 +1,11 @@
 const { DocRecipient } = require('../models');
 const { asyncHandler, notFound, conflict } = require('../utils/http');
 const { paginate, meta } = require('../utils/misc');
+const { resolveCompanyId, companyFilter } = require('../utils/companyScope');
 
 exports.list = asyncHandler(async (req, res) => {
   const { limit, offset, page, pageSize } = paginate(req.query);
-  const where = { OwnerId: req.userId, ArchivedAt: null };
+  const where = { OwnerId: req.userId, ArchivedAt: null, ...companyFilter(req.query) };
   if (req.query.projectId) where.DocProjectId = req.query.projectId;
 
   const { rows, count } = await DocRecipient.findAndCountAll({
@@ -26,6 +27,7 @@ exports.create = asyncHandler(async (req, res) => {
   const recipient = await DocRecipient.create({
     OwnerId: req.userId,
     DocProjectId: projectId || null,
+    DocCompanyId: await resolveCompanyId(req.userId, req.body.companyId),
     Name: name,
     Email: email,
     Company: company || null,

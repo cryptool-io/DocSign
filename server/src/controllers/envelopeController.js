@@ -7,12 +7,41 @@ const {
   DocRecipient,
   sequelize
 } = require('../models');
+const { DocCompany, DocCompanyEmail } = require('../models');
 const { generateOpaqueToken } = require('../services/docroom/tokens');
 const { appendAuditEvent } = require('../services/docroom/hashChain');
 const { APP_BASE_URL, signatureRequest } = require('../services/email');
 const { asyncHandler, notFound, badRequest, forbidden } = require('../utils/http');
+const { resolveCompanyId, companyFilter } = require('../utils/companyScope');
 
 const signUrl = (token) => `${APP_BASE_URL}/sign/${token}`;
+
+// Resolve the sending identity (name + from address) for an envelope. Falls back
+// to the app user when no company is set. Validates fromEmail against the
+// company's linked addresses.
+const resolveSenderIdentity = async (ownerId, companyId, fromEmail, fallbackUser) => {
+  if (!companyId) {
+    return { fromName: fallbackUser.Name, fromEmail: fromEmail || null, replyTo: null };
+  }
+  const company = await DocCompany.findOne({
+    where: { id: companyId, OwnerId: ownerId },
+    include: [{ model: DocCompanyEmail, as: 'Emails' }]
+  });
+  if (!company) throw badRequest('Company not found.', 'bad_company');
+  const linked = company.Emails || [];
+  let chosen = null;
+  if (fromEmail) {
+    chosen = linked.find((e) => e.Email === fromEmail);
+    if (!chosen) throw badRequest('That from-address is not linked to this company.', 'bad_from_email');
+  } else {
+    chosen = linked.find((e) => e.IsDefault) || linked[0] || null;
+  }
+  return {
+    fromName: company.SenderName || company.Name,
+    fromEmail: chosen ? chosen.Email : company.SenderEmail || null,
+    replyTo: company.ReplyToEmail || null
+  };
+};
 
 const serializeSigner = (s) => ({
   id: s.id,
@@ -37,6 +66,10 @@ const serialize = (env) => ({
   message: env.Message,
   status: env.Status,
   signingOrder: env.SigningOrder,
+  deliveryMode: env.DeliveryMode,
+  requireVerification: env.RequireVerification,
+  fromEmail: env.FromEmail,
+  companyId: env.DocCompanyId,
   expiresAt: env.ExpiresAt,
   sentAt: env.SentAt,
   completedAt: env.CompletedAt,
@@ -56,7 +89,7 @@ const withGraph = (id, ownerId) =>
   });
 
 exports.list = asyncHandler(async (req, res) => {
-  const where = { CreatedBy: req.userId };
+  const where = { CreatedBy: req.userId, ...companyFilter(req.query) };
   if (req.query.projectId) where.DocProjectId = req.query.projectId;
   if (req.query.status) where.Status = req.query.status;
   const envelopes = await DocEnvelope.findAll({
@@ -100,6 +133,15 @@ exports.create = asyncHandler(async (req, res) => {
     if (owned !== new Set(recipientIds).size) throw badRequest('Unknown recipient.', 'bad_recipient');
   }
 
+  // Resolve company (explicit, else inherit from document) + sending identity.
+  const companyId = b.companyId
+    ? await resolveCompanyId(req.userId, b.companyId)
+    : doc.DocCompanyId || (template ? template.DocCompanyId : null);
+  const sender = await resolveSenderIdentity(req.userId, companyId, b.fromEmail, req.user);
+  // In link mode, verification is optional (default off unless explicitly set).
+  const requireVerification =
+    b.deliveryMode === 'link' ? b.requireVerification === true : b.requireVerification !== false;
+
   // Source of field definitions: explicit request fields, else template fields.
   const sourceFields =
     b.fields ||
@@ -120,12 +162,16 @@ exports.create = asyncHandler(async (req, res) => {
       {
         DocDocumentId: doc.id,
         DocProjectId: b.projectId || doc.DocProjectId || null,
+        DocCompanyId: companyId,
         DocTemplateId: b.templateId || null,
         CreatedBy: req.userId,
         Subject: b.subject,
         Message: b.message || null,
         Status: 'draft',
         SigningOrder: b.signingOrder || 'parallel',
+        DeliveryMode: b.deliveryMode || 'email',
+        RequireVerification: requireVerification,
+        FromEmail: sender.fromEmail,
         ExpiresAt: b.expiresAt || null
       },
       { transaction: t }
@@ -198,7 +244,11 @@ exports.create = asyncHandler(async (req, res) => {
   res.status(201).json({ data: serialize(await withGraph(env.id, req.userId)) });
 });
 
-/** Send a draft: flip to 'sent', email the first signer(s) per signing order. */
+/**
+ * Send a draft. In 'email' mode, the first signer(s) per signing order are
+ * emailed from the company identity. In 'link' mode nothing is emailed — the
+ * response includes copyable signing links for the sender to share manually.
+ */
 exports.send = asyncHandler(async (req, res) => {
   const env = await withGraph(req.params.id, req.userId);
   if (!env) throw notFound('Envelope not found');
@@ -209,9 +259,11 @@ exports.send = asyncHandler(async (req, res) => {
   const signers = (
     await DocEnvelopeSigner.scope('withSecrets').findAll({ where: { DocEnvelopeId: env.id } })
   ).sort((a, b) => a.SigningOrder - b.SigningOrder);
-  // Sequential: only the lowest signing order is notified first. Parallel: all.
+  // Sequential: only the lowest signing order is active first. Parallel: all.
   const firstOrder = signers[0].SigningOrder;
-  const toNotify = env.SigningOrder === 'sequential' ? signers.filter((s) => s.SigningOrder === firstOrder) : signers;
+  const active = env.SigningOrder === 'sequential' ? signers.filter((s) => s.SigningOrder === firstOrder) : signers;
+
+  const isLink = env.DeliveryMode === 'link';
 
   await sequelize.transaction(async (t) => {
     await env.update({ Status: 'sent', SentAt: new Date() }, { transaction: t });
@@ -223,30 +275,109 @@ exports.send = asyncHandler(async (req, res) => {
         actorId: req.userId,
         actorEmail: req.user.Email,
         eventType: 'envelope.sent',
-        metadata: { order: env.SigningOrder, notified: toNotify.map((s) => s.Email) }
+        metadata: { order: env.SigningOrder, deliveryMode: env.DeliveryMode, active: active.map((s) => s.Email) }
       },
       { transaction: t }
     );
-    for (const s of toNotify) {
-      await s.update({ NotifiedAt: new Date() }, { transaction: t });
+    // In email mode we mark who was notified; in link mode nothing is emailed.
+    if (!isLink) {
+      for (const s of active) await s.update({ NotifiedAt: new Date() }, { transaction: t });
     }
   });
 
-  // Emails after commit.
-  await Promise.allSettled(
-    toNotify.map((s) =>
-      signatureRequest({
-        to: s.Email,
-        signerName: s.Name,
-        senderName: req.user.Name,
-        subject: env.Subject,
-        message: env.Message,
-        signUrl: signUrl(s.AccessToken)
-      })
-    )
-  );
+  if (!isLink) {
+    const identity = await resolveSenderIdentity(req.userId, env.DocCompanyId, env.FromEmail, req.user);
+    await Promise.allSettled(
+      active.map((s) =>
+        signatureRequest({
+          to: s.Email,
+          signerName: s.Name,
+          senderName: identity.fromName,
+          fromEmail: identity.fromEmail,
+          replyTo: identity.replyTo,
+          subject: env.Subject,
+          message: env.Message,
+          signUrl: signUrl(s.AccessToken)
+        })
+      )
+    );
+  }
 
-  res.json({ data: serialize(await withGraph(env.id, req.userId)) });
+  // Always return the signing links (all signers) so the sender can copy them —
+  // essential in link mode, handy in email mode.
+  const links = signers.map((s) => ({
+    signerId: s.id,
+    name: s.Name,
+    email: s.Email,
+    signingOrder: s.SigningOrder,
+    active: active.some((a) => a.id === s.id),
+    url: signUrl(s.AccessToken)
+  }));
+
+  res.json({ data: serialize(await withGraph(env.id, req.userId)), deliveryMode: env.DeliveryMode, links });
+});
+
+/**
+ * Envelopes addressed to the logged-in user as a SIGNER (not as sender) — their
+ * personal signing inbox. `status=pending` = still to sign; `status=signed` =
+ * already signed by them. Matches on the account email OR an explicit
+ * SignedByUserId attribution.
+ */
+exports.inbox = asyncHandler(async (req, res) => {
+  const { Op } = require('sequelize');
+  const wantSigned = req.query.status === 'signed';
+  const signerWhere = {
+    [Op.or]: [{ Email: req.user.Email }, { SignedByUserId: req.userId }]
+  };
+  signerWhere.Status = wantSigned ? 'signed' : { [Op.in]: ['pending', 'viewed'] };
+
+  const signers = await DocEnvelopeSigner.findAll({
+    where: signerWhere,
+    include: [{ model: DocEnvelope, as: 'Envelope' }],
+    order: [['createdAt', 'DESC']]
+  });
+
+  const data = [];
+  for (const s of signers) {
+    const env = s.Envelope;
+    if (!env) continue;
+    // For "to sign", only surface envelopes that are actually out for signature.
+    if (!wantSigned && !['sent', 'partially_signed'].includes(env.Status)) continue;
+    const doc = await DocDocument.findByPk(env.DocDocumentId);
+    // Reload the signer with its access token so the frontend can deep-link.
+    const withTok = await DocEnvelopeSigner.scope('withSecrets').findByPk(s.id);
+    data.push({
+      envelopeId: env.id,
+      subject: env.Subject,
+      status: env.Status,
+      documentName: doc?.Name,
+      signerStatus: s.Status,
+      signedAt: s.SignedAt,
+      completedAt: env.CompletedAt,
+      hasCompletedFile: Boolean(env.CompletedFileKey),
+      signUrl: signUrl(withTok.AccessToken)
+    });
+  }
+  res.json({ data });
+});
+
+/** Return the per-signer signing links for an already-created envelope. */
+exports.links = asyncHandler(async (req, res) => {
+  const env = await DocEnvelope.findOne({ where: { id: req.params.id, CreatedBy: req.userId } });
+  if (!env) throw notFound('Envelope not found');
+  const signers = await DocEnvelopeSigner.scope('withSecrets').findAll({ where: { DocEnvelopeId: env.id } });
+  res.json({
+    data: signers
+      .sort((a, b) => a.SigningOrder - b.SigningOrder)
+      .map((s) => ({
+        signerId: s.id,
+        name: s.Name,
+        email: s.Email,
+        status: s.Status,
+        signingOrder: s.SigningOrder,
+        url: signUrl(s.AccessToken)
+      }))
+  });
 });
 
 exports.void = asyncHandler(async (req, res) => {

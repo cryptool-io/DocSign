@@ -46,13 +46,17 @@ const layout = (heading, bodyHtml, cta) => `
     </div>
   </div>`;
 
-const sendEmail = async ({ to, subject, html, text }) => {
+const sendEmail = async ({ to, subject, html, text, fromName, fromEmail, replyTo }) => {
+  // Per-send identity (company send-as) overrides the global default.
+  const senderName = fromName || FROM_NAME;
+  const senderEmail = fromEmail || FROM_EMAIL;
   const message = {
-    from: `${FROM_NAME} <${FROM_EMAIL}>`,
+    from: `${senderName} <${senderEmail}>`,
     to,
     subject,
     html,
-    text: text || html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
+    text: text || html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim(),
+    ...(replyTo ? { replyTo } : {})
   };
 
   if (DRY_RUN) {
@@ -101,9 +105,12 @@ const linkViewedNotice = ({ to, docName, viewerEmail, when }) =>
     )
   });
 
-const signatureRequest = ({ to, signerName, senderName, subject, message, signUrl }) =>
+const signatureRequest = ({ to, signerName, senderName, fromEmail, replyTo, subject, message, signUrl }) =>
   sendEmail({
     to,
+    fromName: senderName,
+    fromEmail,
+    replyTo,
     subject: subject || `${senderName} requested your signature`,
     html: layout(
       `${senderName} requested your signature`,

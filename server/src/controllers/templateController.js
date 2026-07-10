@@ -1,5 +1,6 @@
 const { DocTemplate, DocSignatureField, DocDocument, sequelize } = require('../models');
 const { asyncHandler, notFound, badRequest } = require('../utils/http');
+const { resolveCompanyId, companyFilter } = require('../utils/companyScope');
 
 const serialize = (tpl) => ({
   ...tpl.toJSON(),
@@ -24,7 +25,7 @@ const withFields = (id, ownerId) =>
   });
 
 exports.list = asyncHandler(async (req, res) => {
-  const where = { OwnerId: req.userId, ArchivedAt: null };
+  const where = { OwnerId: req.userId, ArchivedAt: null, ...companyFilter(req.query) };
   if (req.query.projectId) where.DocProjectId = req.query.projectId;
   const templates = await DocTemplate.findAll({ where, order: [['updatedAt', 'DESC']] });
   res.json({ data: templates });
@@ -66,6 +67,7 @@ exports.create = asyncHandler(async (req, res) => {
       {
         OwnerId: req.userId,
         DocProjectId: body.projectId || null,
+        DocCompanyId: await resolveCompanyId(req.userId, body.companyId),
         SourceDocumentId: body.sourceDocumentId || null,
         Name: body.name,
         Description: body.description || null,

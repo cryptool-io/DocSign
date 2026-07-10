@@ -1,16 +1,21 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import api from '../lib/api.js';
+import { useCompany, companyParam } from '../lib/company.js';
 import { Spinner, Badge, fmtDate } from '../lib/ui.jsx';
 
 export default function Templates() {
   const [items, setItems] = useState(null);
   const nav = useNavigate();
+  const activeId = useCompany((s) => s.activeId);
 
-  const load = () => api.get('/templates').then((r) => setItems(r.data.data));
+  const load = () => {
+    const q = companyParam();
+    return api.get(`/templates${q ? `?${q}` : ''}`).then((r) => setItems(r.data.data));
+  };
   useEffect(() => {
     load();
-  }, []);
+  }, [activeId]);
 
   const remove = async (id) => {
     if (!confirm('Archive this template?')) return;

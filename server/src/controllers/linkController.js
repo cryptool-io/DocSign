@@ -23,6 +23,7 @@ exports.list = asyncHandler(async (req, res) => {
   const where = { CreatedBy: req.userId };
   if (req.query.documentId) where.DocDocumentId = req.query.documentId;
   if (req.query.projectId) where.DocProjectId = req.query.projectId;
+  if (req.query.companyId) where.DocCompanyId = req.query.companyId === 'none' ? null : req.query.companyId;
 
   const links = await DocLink.scope('withSecrets').findAll({ where, order: [['createdAt', 'DESC']] });
   // Attach view + unique-viewer counts in one grouped query.
@@ -65,6 +66,7 @@ exports.create = asyncHandler(async (req, res) => {
   const link = await DocLink.create({
     DocDocumentId: doc.id,
     DocProjectId: doc.DocProjectId,
+    DocCompanyId: doc.DocCompanyId, // inherit the document's company
     DocRecipientId: b.recipientId || null,
     CreatedBy: req.userId,
     Token: generateOpaqueToken(24),

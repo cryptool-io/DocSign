@@ -18,6 +18,8 @@ import EnvelopeDetail from './pages/EnvelopeDetail.jsx';
 import SendEnvelope from './pages/SendEnvelope.jsx';
 import Settings from './pages/Settings.jsx';
 import DataRooms from './pages/DataRooms.jsx';
+import Companies from './pages/Companies.jsx';
+import Inbox from './pages/Inbox.jsx';
 import PublicDataRoom from './pages/public/PublicDataRoom.jsx';
 
 import PublicView from './pages/public/PublicView.jsx';
@@ -70,6 +72,8 @@ export default function App() {
           <Route path="envelopes/:id" element={<EnvelopeDetail />} />
           <Route path="send" element={<SendEnvelope />} />
           <Route path="data-rooms" element={<DataRooms />} />
+          <Route path="companies" element={<Companies />} />
+          <Route path="inbox" element={<Inbox />} />
           <Route path="settings" element={<Settings />} />
         </Route>
 

@@ -6,6 +6,7 @@ module.exports = (sequelize, DataTypes) => {
     static associate(models) {
       DocTemplate.belongsTo(models.User, { foreignKey: 'OwnerId', as: 'Owner' });
       DocTemplate.belongsTo(models.DocProject, { foreignKey: 'DocProjectId', as: 'Project' });
+      DocTemplate.belongsTo(models.DocCompany, { foreignKey: 'DocCompanyId', as: 'Company' });
       DocTemplate.belongsTo(models.DocDocument, { foreignKey: 'SourceDocumentId', as: 'SourceDocument' });
       DocTemplate.hasMany(models.DocSignatureField, { foreignKey: 'DocTemplateId', as: 'Fields' });
       DocTemplate.hasMany(models.DocEnvelope, { foreignKey: 'DocTemplateId', as: 'Envelopes' });
@@ -15,6 +16,7 @@ module.exports = (sequelize, DataTypes) => {
   DocTemplate.init(
     {
       DocProjectId: { type: DataTypes.UUID, allowNull: true },
+      DocCompanyId: { type: DataTypes.UUID, allowNull: true },
       SourceDocumentId: { type: DataTypes.UUID, allowNull: true },
       OwnerId: { type: DataTypes.UUID, allowNull: false },
       Name: { type: DataTypes.STRING, allowNull: false },

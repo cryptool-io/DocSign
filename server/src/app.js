@@ -47,6 +47,7 @@ app.get('/api/health', (_req, res) => res.json({ ok: true, service: 'cto-docsign
 
 // --- API routers ---------------------------------------------------------
 app.use('/api/auth', require('./routes/authRoutes'));
+app.use('/api/companies', require('./routes/companyRoutes'));
 app.use('/api/projects', require('./routes/projectRoutes'));
 app.use('/api/documents', require('./routes/documentRoutes'));
 app.use('/api/recipients', require('./routes/recipientRoutes'));

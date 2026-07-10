@@ -1,15 +1,18 @@
 import { useEffect, useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import api from '../lib/api.js';
+import { useCompany, companyParam } from '../lib/company.js';
 import { Spinner, Badge, fmtDate } from '../lib/ui.jsx';
 
 export default function Envelopes() {
   const [items, setItems] = useState(null);
   const nav = useNavigate();
+  const activeId = useCompany((s) => s.activeId);
 
   useEffect(() => {
-    api.get('/envelopes').then((r) => setItems(r.data.data));
-  }, []);
+    const q = companyParam();
+    api.get(`/envelopes${q ? `?${q}` : ''}`).then((r) => setItems(r.data.data));
+  }, [activeId]);
 
   if (!items) return <Spinner center />;
 

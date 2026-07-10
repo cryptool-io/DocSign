@@ -7,7 +7,8 @@ const project = {
   create: Joi.object({
     name: Joi.string().min(1).max(160).trim().required(),
     description: Joi.string().max(2000).allow('', null),
-    logoUrl: Joi.string().uri().max(1000).allow('', null)
+    logoUrl: Joi.string().uri().max(1000).allow('', null),
+    companyId: uuid.allow(null)
   }),
   update: Joi.object({
     name: Joi.string().min(1).max(160).trim(),
@@ -22,7 +23,8 @@ const recipient = {
     email: Joi.string().email().max(254).lowercase().trim().required(),
     company: Joi.string().max(160).allow('', null),
     title: Joi.string().max(160).allow('', null),
-    projectId: uuid.allow(null)
+    projectId: uuid.allow(null),
+    companyId: uuid.allow(null)
   }),
   update: Joi.object({
     name: Joi.string().min(1).max(160).trim(),
@@ -37,6 +39,7 @@ const recipientGroup = {
   create: Joi.object({
     name: Joi.string().min(1).max(160).trim().required(),
     projectId: uuid.allow(null),
+    companyId: uuid.allow(null),
     members: Joi.array()
       .items(
         Joi.object({
@@ -76,6 +79,7 @@ const template = {
     name: Joi.string().min(1).max(160).trim().required(),
     description: Joi.string().max(2000).allow('', null),
     projectId: uuid.allow(null),
+    companyId: uuid.allow(null),
     sourceDocumentId: uuid.allow(null),
     requiresSignature: Joi.boolean().default(false),
     signerRoles: Joi.array()

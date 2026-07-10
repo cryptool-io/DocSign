@@ -6,6 +6,7 @@ module.exports = (sequelize, DataTypes) => {
     static associate(models) {
       DocEnvelopeSigner.belongsTo(models.DocEnvelope, { foreignKey: 'DocEnvelopeId', as: 'Envelope' });
       DocEnvelopeSigner.belongsTo(models.DocRecipient, { foreignKey: 'DocRecipientId', as: 'Recipient' });
+      DocEnvelopeSigner.belongsTo(models.User, { foreignKey: 'SignedByUserId', as: 'SignedByUser' });
       DocEnvelopeSigner.hasMany(models.DocSignatureField, {
         foreignKey: 'DocEnvelopeSignerId',
         as: 'Fields'
@@ -17,6 +18,7 @@ module.exports = (sequelize, DataTypes) => {
     {
       DocEnvelopeId: { type: DataTypes.UUID, allowNull: false },
       DocRecipientId: { type: DataTypes.UUID, allowNull: true },
+      SignedByUserId: { type: DataTypes.UUID, allowNull: true },
       Name: { type: DataTypes.STRING, allowNull: false },
       Email: {
         type: DataTypes.STRING,

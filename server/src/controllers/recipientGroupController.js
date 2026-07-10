@@ -5,6 +5,7 @@ const {
   sequelize
 } = require('../models');
 const { asyncHandler, notFound, badRequest } = require('../utils/http');
+const { resolveCompanyId, companyFilter } = require('../utils/companyScope');
 
 // Confirm every recipientId in a member list belongs to this owner.
 const assertOwnedRecipients = async (ownerId, memberList) => {
@@ -33,7 +34,7 @@ const withMembers = (id, ownerId) =>
   });
 
 exports.list = asyncHandler(async (req, res) => {
-  const where = { OwnerId: req.userId };
+  const where = { OwnerId: req.userId, ...companyFilter(req.query) };
   if (req.query.projectId) where.DocProjectId = req.query.projectId;
   const groups = await DocRecipientGroup.findAll({
     where,
@@ -49,7 +50,12 @@ exports.create = asyncHandler(async (req, res) => {
 
   const group = await sequelize.transaction(async (t) => {
     const g = await DocRecipientGroup.create(
-      { OwnerId: req.userId, DocProjectId: projectId || null, Name: name },
+      {
+        OwnerId: req.userId,
+        DocProjectId: projectId || null,
+        DocCompanyId: await resolveCompanyId(req.userId, req.body.companyId),
+        Name: name
+      },
       { transaction: t }
     );
     if (members?.length) {

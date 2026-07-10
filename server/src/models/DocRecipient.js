@@ -6,6 +6,8 @@ module.exports = (sequelize, DataTypes) => {
     static associate(models) {
       DocRecipient.belongsTo(models.User, { foreignKey: 'OwnerId', as: 'Owner' });
       DocRecipient.belongsTo(models.DocProject, { foreignKey: 'DocProjectId', as: 'Project' });
+      // 'Workspace' alias to avoid colliding with the recipient's own Company (employer) attribute.
+      DocRecipient.belongsTo(models.DocCompany, { foreignKey: 'DocCompanyId', as: 'Workspace' });
       DocRecipient.belongsToMany(models.DocRecipientGroup, {
         through: models.DocRecipientGroupMember,
         foreignKey: 'DocRecipientId',
@@ -21,6 +23,7 @@ module.exports = (sequelize, DataTypes) => {
     {
       OwnerId: { type: DataTypes.UUID, allowNull: false },
       DocProjectId: { type: DataTypes.UUID, allowNull: true },
+      DocCompanyId: { type: DataTypes.UUID, allowNull: true },
       Name: { type: DataTypes.STRING, allowNull: false },
       Email: {
         type: DataTypes.STRING,

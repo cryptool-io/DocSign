@@ -28,14 +28,28 @@ export default function PublicSign() {
     pub
       .get(`/sign/${token}/meta`)
       .then((r) => {
-        setMeta(r.data.data);
-        if (r.data.data.signer.status === 'signed') setStage('done');
-        else if (['declined', 'voided'].includes(r.data.data.status)) setStage('declined');
+        const d = r.data.data;
+        setMeta(d);
+        setTypedName(d.signer.name || '');
+        if (d.signer.status === 'signed') setStage('done');
+        else if (['declined', 'voided'].includes(d.status)) setStage('declined');
+        else if (d.requireVerification === false) startNoCode();
         else setStage('otp');
-        setTypedName(r.data.data.signer.name || '');
       })
       .catch((e) => setError(e.response?.data?.error || 'This signing link is unavailable.'));
   }, [token]);
+
+  // No-code path (link mode with verification off): jump straight to signing.
+  const startNoCode = async () => {
+    try {
+      const { data } = await pub.post(`/sign/${token}/start`);
+      setSignerToken(data.data.signerToken);
+    } catch (e) {
+      // If the server actually requires a code, fall back to the OTP screen.
+      setStage('otp');
+      setError(e.response?.data?.error || null);
+    }
+  };
 
   const requestOtp = async () => {
     setBusy(true);
@@ -90,7 +104,11 @@ export default function PublicSign() {
         signatureData: typedName,
         values: nonSigFields.map((f) => ({ fieldId: f.id, value: f.type === 'checkbox' ? (values[f.id] ? 'x' : '') : values[f.id] || '' }))
       };
-      const { data } = await pub.post(`/sign/${token}/submit`, payload, auth());
+      // If this browser is also logged into an app account, pass its token so the
+      // completed doc is attributed to that user (even if the signing email differs).
+      const appToken = localStorage.getItem('docsign_access');
+      const headers = { ...auth().headers, ...(appToken ? { 'X-App-Authorization': `Bearer ${appToken}` } : {}) };
+      const { data } = await pub.post(`/sign/${token}/submit`, payload, { headers });
       setStage('done');
       setMeta((m) => ({ ...m, status: data.data.status }));
     } catch (err) {

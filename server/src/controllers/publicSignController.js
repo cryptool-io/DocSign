@@ -3,6 +3,7 @@ const {
   DocEnvelopeSigner,
   DocSignatureField,
   DocDocument,
+  User,
   sequelize
 } = require('../models');
 const storage = require('../services/docroom/storage');
@@ -13,6 +14,7 @@ const {
   issueSignerToken,
   verifySignerToken
 } = require('../services/docroom/tokens');
+const { verifyAccessToken } = require('../services/authTokens');
 const { appendAuditEvent } = require('../services/docroom/hashChain');
 const { finalizeEnvelope } = require('../services/docroom/completion');
 const { signerOtp, envelopeCompleted } = require('../services/email');
@@ -66,10 +68,56 @@ exports.meta = asyncHandler(async (req, res) => {
       pageCount: doc?.PageCount || 0,
       signer: { name: signer.Name, email: signer.Email, status: signer.Status },
       emailVerified: Boolean(signer.EmailVerifiedAt),
+      requireVerification: env.RequireVerification,
       yourTurn,
       expiresAt: env.ExpiresAt
     }
   });
+});
+
+/**
+ * Begin signing WITHOUT an email code — only allowed when the envelope was sent
+ * with verification off (typically link-delivery mode). Records the view and
+ * issues a signer token directly.
+ */
+exports.start = asyncHandler(async (req, res) => {
+  const { signer, env } = await loadSignerByAccessToken(req.params.token);
+  assertSignable(env, signer);
+  if (env.RequireVerification) {
+    throw forbidden('This document requires email verification. Request a code instead.', 'verification_required');
+  }
+  if (!(await isSignerTurn(env, signer))) throw forbidden('It is not your turn to sign yet.', 'not_your_turn');
+
+  const ip = clientIp(req);
+  const ua = req.headers['user-agent'] || null;
+  await sequelize.transaction(async (t) => {
+    await signer.update(
+      {
+        Status: signer.Status === 'pending' ? 'viewed' : signer.Status,
+        ViewedAt: signer.ViewedAt || new Date(),
+        IpAddress: ip,
+        UserAgent: ua
+      },
+      { transaction: t }
+    );
+    await appendAuditEvent(
+      {
+        envelopeId: env.id,
+        documentId: env.DocDocumentId,
+        actorType: 'signer',
+        actorId: signer.id,
+        actorEmail: signer.Email,
+        eventType: 'signer.opened',
+        metadata: { signerId: signer.id, verification: 'none' },
+        ipAddress: ip,
+        userAgent: ua
+      },
+      { transaction: t }
+    );
+  });
+
+  const token = issueSignerToken({ signerId: signer.id, envelopeId: env.id, email: signer.Email });
+  res.json({ data: { signerToken: token } });
 });
 
 /** Public: send the signer a 6-digit OTP to prove mailbox control. */
@@ -191,6 +239,26 @@ exports.file = asyncHandler(async (req, res) => {
  * flips the signer to 'signed', advances sequential order (notifying the next
  * signer), and finalizes the envelope when everyone has signed.
  */
+// Attribute a signature to an app user when possible: an optional logged-in
+// app token (X-App-Authorization) wins; otherwise match the signer's email to
+// an existing account. Either way the completed doc shows up in that user's
+// "signed by me" list.
+const resolveSignedByUser = async (req, signerEmail) => {
+  const appHeader = req.headers['x-app-authorization'] || '';
+  const appToken = appHeader.startsWith('Bearer ') ? appHeader.slice(7) : null;
+  if (appToken) {
+    try {
+      const payload = verifyAccessToken(appToken);
+      const user = await User.findByPk(payload.sub);
+      if (user && !user.DisabledAt) return user.id;
+    } catch {
+      /* fall through to email match */
+    }
+  }
+  const match = await User.findOne({ where: { Email: String(signerEmail).toLowerCase() } });
+  return match ? match.id : null;
+};
+
 exports.submit = asyncHandler(async (req, res) => {
   const { signer, env } = await authorizeSigner(req);
   assertSignable(env, signer);
@@ -199,6 +267,7 @@ exports.submit = asyncHandler(async (req, res) => {
   const { consent, signatureType, signatureData, values } = req.body;
   const ip = clientIp(req);
   const ua = req.headers['user-agent'] || null;
+  const signedByUserId = await resolveSignedByUser(req, signer.Email);
 
   const fields = await DocSignatureField.findAll({
     where: { DocEnvelopeId: env.id, DocEnvelopeSignerId: signer.id }
@@ -239,6 +308,7 @@ exports.submit = asyncHandler(async (req, res) => {
         ConsentedAt: new Date(),
         SignatureType: signatureType,
         SignatureImageKey: signatureType === 'drawn' ? signatureData : null,
+        SignedByUserId: signedByUserId,
         IpAddress: ip,
         UserAgent: ua
       },

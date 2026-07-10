@@ -6,6 +6,7 @@ module.exports = (sequelize, DataTypes) => {
     static associate(models) {
       DocDocument.belongsTo(models.User, { foreignKey: 'OwnerId', as: 'Owner' });
       DocDocument.belongsTo(models.DocProject, { foreignKey: 'DocProjectId', as: 'Project' });
+      DocDocument.belongsTo(models.DocCompany, { foreignKey: 'DocCompanyId', as: 'Company' });
       DocDocument.belongsTo(models.DocDocument, { foreignKey: 'ParentDocumentId', as: 'ParentDocument' });
       DocDocument.hasMany(models.DocDocument, { foreignKey: 'ParentDocumentId', as: 'Versions' });
       DocDocument.hasMany(models.DocLink, { foreignKey: 'DocDocumentId', as: 'Links' });
@@ -16,6 +17,7 @@ module.exports = (sequelize, DataTypes) => {
   DocDocument.init(
     {
       DocProjectId: { type: DataTypes.UUID, allowNull: true },
+      DocCompanyId: { type: DataTypes.UUID, allowNull: true },
       OwnerId: { type: DataTypes.UUID, allowNull: false },
       Name: { type: DataTypes.STRING, allowNull: false },
       StorageDriver: { type: DataTypes.STRING, allowNull: false, defaultValue: 's3' },

@@ -13,6 +13,7 @@ const create = Joi.object({
   name: Joi.string().min(1).max(160).trim().required(),
   description: Joi.string().max(2000).allow('', null),
   projectId: uuid.allow(null),
+  companyId: uuid.allow(null),
   requireEmail: Joi.boolean().default(true),
   password: Joi.string().min(1).max(128).allow('', null),
   allowDownload: Joi.boolean().default(false),

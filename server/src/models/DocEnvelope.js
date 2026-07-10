@@ -7,6 +7,7 @@ module.exports = (sequelize, DataTypes) => {
       DocEnvelope.belongsTo(models.User, { foreignKey: 'CreatedBy', as: 'Creator' });
       DocEnvelope.belongsTo(models.DocDocument, { foreignKey: 'DocDocumentId', as: 'Document' });
       DocEnvelope.belongsTo(models.DocProject, { foreignKey: 'DocProjectId', as: 'Project' });
+      DocEnvelope.belongsTo(models.DocCompany, { foreignKey: 'DocCompanyId', as: 'Company' });
       DocEnvelope.belongsTo(models.DocTemplate, { foreignKey: 'DocTemplateId', as: 'Template' });
       DocEnvelope.hasMany(models.DocEnvelopeSigner, { foreignKey: 'DocEnvelopeId', as: 'Signers' });
       DocEnvelope.hasMany(models.DocSignatureField, { foreignKey: 'DocEnvelopeId', as: 'Fields' });
@@ -22,10 +23,14 @@ module.exports = (sequelize, DataTypes) => {
     {
       DocDocumentId: { type: DataTypes.UUID, allowNull: false },
       DocProjectId: { type: DataTypes.UUID, allowNull: true },
+      DocCompanyId: { type: DataTypes.UUID, allowNull: true },
       DocTemplateId: { type: DataTypes.UUID, allowNull: true },
       CreatedBy: { type: DataTypes.UUID, allowNull: false },
       Subject: { type: DataTypes.STRING, allowNull: false },
       Message: { type: DataTypes.TEXT, allowNull: true },
+      DeliveryMode: { type: DataTypes.ENUM('email', 'link'), allowNull: false, defaultValue: 'email' },
+      RequireVerification: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
+      FromEmail: { type: DataTypes.STRING, allowNull: true },
       Status: {
         type: DataTypes.ENUM('draft', 'sent', 'partially_signed', 'completed', 'declined', 'voided', 'expired'),
         allowNull: false,

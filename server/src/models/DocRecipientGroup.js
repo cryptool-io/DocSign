@@ -6,6 +6,7 @@ module.exports = (sequelize, DataTypes) => {
     static associate(models) {
       DocRecipientGroup.belongsTo(models.User, { foreignKey: 'OwnerId', as: 'Owner' });
       DocRecipientGroup.belongsTo(models.DocProject, { foreignKey: 'DocProjectId', as: 'Project' });
+      DocRecipientGroup.belongsTo(models.DocCompany, { foreignKey: 'DocCompanyId', as: 'Company' });
       DocRecipientGroup.belongsToMany(models.DocRecipient, {
         through: models.DocRecipientGroupMember,
         foreignKey: 'DocRecipientGroupId',
@@ -23,6 +24,7 @@ module.exports = (sequelize, DataTypes) => {
     {
       OwnerId: { type: DataTypes.UUID, allowNull: false },
       DocProjectId: { type: DataTypes.UUID, allowNull: true },
+      DocCompanyId: { type: DataTypes.UUID, allowNull: true },
       Name: { type: DataTypes.STRING, allowNull: false }
     },
     { sequelize, modelName: 'DocRecipientGroup', tableName: 'DocRecipientGroups', timestamps: true }

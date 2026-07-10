@@ -27,9 +27,16 @@ const create = Joi.object({
   documentId: uuid.required(),
   templateId: uuid.allow(null),
   projectId: uuid.allow(null),
+  companyId: uuid.allow(null),
   subject: Joi.string().min(1).max(200).required(),
   message: Joi.string().max(4000).allow('', null),
   signingOrder: Joi.string().valid('sequential', 'parallel').default('parallel'),
+  // 'email' emails each signer a link; 'link' returns copyable links, no email sent.
+  deliveryMode: Joi.string().valid('email', 'link').default('email'),
+  // Whether signers must confirm an emailed one-time code before signing.
+  requireVerification: Joi.boolean().default(true),
+  // The send-as address (must be one of the company's linked emails, if a company is set).
+  fromEmail: Joi.string().email().max(254).lowercase().trim().allow('', null),
   expiresAt: Joi.date().iso().greater('now').allow(null),
   signers: Joi.array().items(signer).min(1).required(),
   // If omitted, fields are copied from the template (mapped by signerRole).

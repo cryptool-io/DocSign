@@ -3,10 +3,11 @@ const storage = require('../services/docroom/storage');
 const pdf = require('../services/docroom/pdf');
 const { asyncHandler, notFound, badRequest } = require('../utils/http');
 const { paginate, meta } = require('../utils/misc');
+const { resolveCompanyId, companyFilter } = require('../utils/companyScope');
 
 exports.list = asyncHandler(async (req, res) => {
   const { limit, offset, page, pageSize } = paginate(req.query);
-  const where = { OwnerId: req.userId, ArchivedAt: null };
+  const where = { OwnerId: req.userId, ArchivedAt: null, ...companyFilter(req.query) };
   if (req.query.projectId) where.DocProjectId = req.query.projectId;
 
   const { rows, count } = await DocDocument.findAndCountAll({
@@ -32,10 +33,16 @@ exports.upload = asyncHandler(async (req, res) => {
   }
 
   const { projectId, name } = req.body;
+  let inheritedCompanyId = null;
   if (projectId) {
     const project = await DocProject.findOne({ where: { id: projectId, OwnerId: req.userId } });
     if (!project) throw badRequest('Project not found.', 'bad_project');
+    inheritedCompanyId = project.DocCompanyId;
   }
+  // Explicit companyId wins; otherwise inherit from the project.
+  const companyId = req.body.companyId
+    ? await resolveCompanyId(req.userId, req.body.companyId)
+    : inheritedCompanyId;
 
   const sha256 = storage.sha256(buffer);
   const key = storage.buildKey(`documents/${req.userId}`, req.file.originalname || 'document.pdf');
@@ -43,6 +50,7 @@ exports.upload = asyncHandler(async (req, res) => {
 
   const doc = await DocDocument.create({
     DocProjectId: projectId || null,
+    DocCompanyId: companyId,
     OwnerId: req.userId,
     Name: name || req.file.originalname || 'Untitled.pdf',
     StorageDriver: storage.driverName,

@@ -1,21 +1,30 @@
+import { useEffect } from 'react';
 import { NavLink, Outlet, useNavigate } from 'react-router-dom';
 import { useAuth } from '../lib/store.js';
+import { useCompany } from '../lib/company.js';
 
 const links = [
   { to: '/', label: 'Dashboard', end: true },
   { to: '/documents', label: 'Documents' },
   { to: '/send', label: 'Send for signature' },
   { to: '/envelopes', label: 'Envelopes' },
+  { to: '/inbox', label: 'To sign' },
   { to: '/data-rooms', label: 'Data rooms' },
   { to: '/templates', label: 'Templates' },
   { to: '/recipients', label: 'Recipients' },
   { to: '/projects', label: 'Projects' },
+  { to: '/companies', label: 'Companies' },
   { to: '/settings', label: 'Settings' }
 ];
 
 export default function Shell() {
   const { user, logout } = useAuth();
+  const { companies, activeId, setActive, load } = useCompany();
   const nav = useNavigate();
+
+  useEffect(() => {
+    load().catch(() => {});
+  }, [load]);
 
   return (
     <div className="app-shell">
@@ -38,12 +47,24 @@ export default function Shell() {
       </aside>
       <div className="main">
         <div className="topbar">
-          <div />
           <div className="flex">
-            <button
-              className="btn primary sm"
-              onClick={() => nav('/send')}
+            <span className="muted" style={{ fontSize: 13 }}>Workspace:</span>
+            <select
+              className="select"
+              style={{ width: 200 }}
+              value={activeId || ''}
+              onChange={(e) => setActive(e.target.value || null)}
             >
+              <option value="">All companies</option>
+              {companies.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="flex">
+            <button className="btn primary sm" onClick={() => nav('/send')}>
               + Send document
             </button>
             <button

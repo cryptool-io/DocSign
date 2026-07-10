@@ -6,6 +6,7 @@ module.exports = (sequelize, DataTypes) => {
     static associate(models) {
       DocDataRoom.belongsTo(models.User, { foreignKey: 'OwnerId', as: 'Owner' });
       DocDataRoom.belongsTo(models.DocProject, { foreignKey: 'DocProjectId', as: 'Project' });
+      DocDataRoom.belongsTo(models.DocCompany, { foreignKey: 'DocCompanyId', as: 'Company' });
       DocDataRoom.hasMany(models.DocDataRoomItem, { foreignKey: 'DocDataRoomId', as: 'Items' });
       DocDataRoom.hasMany(models.DocViewSession, { foreignKey: 'DocDataRoomId', as: 'Sessions' });
     }
@@ -38,6 +39,7 @@ module.exports = (sequelize, DataTypes) => {
     {
       OwnerId: { type: DataTypes.UUID, allowNull: false },
       DocProjectId: { type: DataTypes.UUID, allowNull: true },
+      DocCompanyId: { type: DataTypes.UUID, allowNull: true },
       Name: { type: DataTypes.STRING, allowNull: false },
       Description: { type: DataTypes.TEXT, allowNull: true },
       Token: { type: DataTypes.STRING, allowNull: false, unique: true },

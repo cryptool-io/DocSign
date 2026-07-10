@@ -14,6 +14,8 @@ router.use(publicLimiter);
 router.get('/:token/meta', controller.meta);
 router.post('/:token/request-otp', otpLimiter, controller.requestOtp);
 router.post('/:token/verify-otp', otpLimiter, validate(schemas.verifyOtp), controller.verifyOtp);
+// No-code path (only when the envelope was sent with verification off).
+router.post('/:token/start', controller.start);
 
 // Authorized signer surface (requires signer token from verify-otp).
 router.get('/:token/fields', controller.fields);

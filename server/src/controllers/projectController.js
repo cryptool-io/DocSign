@@ -1,13 +1,14 @@
 const { DocProject, DocDocument, DocEnvelope, DocLink, sequelize } = require('../models');
 const { asyncHandler, notFound, conflict } = require('../utils/http');
 const { slugify, paginate, meta } = require('../utils/misc');
+const { resolveCompanyId, companyFilter } = require('../utils/companyScope');
 
 const ownScope = (req) => ({ OwnerId: req.userId });
 
 exports.list = asyncHandler(async (req, res) => {
   const { limit, offset, page, pageSize } = paginate(req.query);
   const { rows, count } = await DocProject.findAndCountAll({
-    where: { ...ownScope(req), ArchivedAt: null },
+    where: { ...ownScope(req), ...companyFilter(req.query), ArchivedAt: null },
     order: [['updatedAt', 'DESC']],
     limit,
     offset
@@ -43,7 +44,8 @@ exports.create = asyncHandler(async (req, res) => {
     Slug: slug,
     Description: description || null,
     LogoUrl: logoUrl || null,
-    OwnerId: req.userId
+    OwnerId: req.userId,
+    DocCompanyId: await resolveCompanyId(req.userId, req.body.companyId)
   });
   res.status(201).json({ data: project });
 });

@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api, { apiError } from '../lib/api.js';
+import { useCompany, companyParam, withCompany } from '../lib/company.js';
 import { Spinner, useToast, fmtDate } from '../lib/ui.jsx';
 
 function LinkModal({ doc, onClose }) {
@@ -121,15 +122,20 @@ export default function Documents() {
   const fileRef = useRef();
   const toast = useToast();
   const nav = useNavigate();
+  const activeId = useCompany((s) => s.activeId);
 
   const load = async () => {
-    const [d, l] = await Promise.all([api.get('/documents'), api.get('/links')]);
+    const q = companyParam();
+    const [d, l] = await Promise.all([
+      api.get(`/documents${q ? `?${q}` : ''}`),
+      api.get(`/links${q ? `?${q}` : ''}`)
+    ]);
     setItems(d.data.data);
     setLinks(l.data.data);
   };
   useEffect(() => {
     load();
-  }, []);
+  }, [activeId]);
 
   const upload = async (file) => {
     if (!file) return;
@@ -139,6 +145,7 @@ export default function Documents() {
       const fd = new FormData();
       fd.append('file', file);
       fd.append('name', file.name);
+      if (activeId) fd.append('companyId', activeId);
       await api.post('/documents', fd);
       toast('Uploaded');
       load();

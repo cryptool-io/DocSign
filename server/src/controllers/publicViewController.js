@@ -127,6 +127,15 @@ exports.file = asyncHandler(async (req, res) => {
   const doc = await DocDocument.findByPk(link.DocDocumentId);
   if (!doc) throw notFound('Document not found.');
   let buffer = await storage.getObject(doc.FileKey);
+
+  if (doc.Encrypted) {
+    // Zero-knowledge: the server can't read the PDF, so it streams ciphertext and
+    // the viewer decrypts + watermarks client-side using the key from the link.
+    res.setHeader('Content-Type', 'application/octet-stream');
+    res.setHeader('X-Docsign-Encrypted', 'true');
+    return res.send(buffer);
+  }
+
   if (link.Watermark) {
     const mark = payload.email || `Confidential • ${new Date().toISOString().slice(0, 10)}`;
     buffer = await pdf.applyWatermark(buffer, mark);

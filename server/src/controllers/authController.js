@@ -118,6 +118,37 @@ exports.me = asyncHandler(async (req, res) => {
   res.json({ user: req.user.toSafeJSON() });
 });
 
+/**
+ * Initialize (or replace) the account's encryption key material. The client
+ * generates everything locally and sends only wrapped/salted values — the server
+ * stores them opaquely and can never derive a usable key.
+ */
+exports.setupEncryption = asyncHandler(async (req, res) => {
+  const { kdfSalt, wrappedAccountKey, recoveryWrappedAccountKey } = req.body;
+  const user = await User.scope('withSecrets').findByPk(req.userId);
+  // Only set once unless explicitly re-keying (guarded by allowReplace).
+  if (user.WrappedAccountKey && !req.body.allowReplace) {
+    throw badRequest('Encryption is already set up for this account.', 'already_setup');
+  }
+  await user.update({
+    KdfSalt: kdfSalt,
+    WrappedAccountKey: wrappedAccountKey,
+    RecoveryWrappedAccountKey: recoveryWrappedAccountKey || user.RecoveryWrappedAccountKey || null
+  });
+  res.json({ ok: true, encryption: user.toSafeJSON().encryption });
+});
+
+/** Return the recovery-wrapped account key so a user with the recovery key can unlock. */
+exports.recoveryBlob = asyncHandler(async (req, res) => {
+  const user = await User.scope('withSecrets').findByPk(req.userId);
+  res.json({
+    data: {
+      kdfSalt: user.KdfSalt,
+      recoveryWrappedAccountKey: user.RecoveryWrappedAccountKey || null
+    }
+  });
+});
+
 exports.verifyEmail = asyncHandler(async (req, res) => {
   const { token } = req.body;
   const user = await User.scope('withSecrets').findOne({ where: { VerificationToken: token } });

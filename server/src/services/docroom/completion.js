@@ -7,6 +7,7 @@ const {
 } = require('../../models');
 const storage = require('./storage');
 const pdf = require('./pdf');
+const cryptoBox = require('./crypto');
 const { appendAuditEvent, verifyChain } = require('./hashChain');
 
 /**
@@ -26,7 +27,7 @@ const decodeSignatureImage = (signer) => {
  * original PDF, appends the certificate of completion, stores the result, and
  * records the terminal audit event. Idempotent-ish: guarded by envelope status.
  */
-const finalizeEnvelope = async (envelopeId) => {
+const finalizeEnvelope = async (envelopeId, { documentKey = null } = {}) => {
   return sequelize.transaction(async (t) => {
     const env = await DocEnvelope.findByPk(envelopeId, { transaction: t, lock: t.LOCK.UPDATE });
     if (!env || env.Status === 'completed') return env;
@@ -38,6 +39,18 @@ const finalizeEnvelope = async (envelopeId) => {
     ]);
 
     let buffer = await storage.getObject(doc.FileKey);
+
+    // Decrypt-to-stamp: for an encrypted document the stored bytes are ciphertext.
+    // The signer's browser supplied the document key over TLS; we decrypt in
+    // memory, verify it matches the plaintext hash asserted at upload, and later
+    // re-encrypt the stamped result with the SAME key. The key is never stored.
+    if (doc.Encrypted) {
+      if (!documentKey) throw new Error('Encrypted document requires a documentKey to finalize.');
+      buffer = cryptoBox.decryptBuffer(buffer, documentKey);
+      if (cryptoBox.sha256Hex(buffer) !== doc.Sha256) {
+        throw new Error('Decrypted document hash does not match the hash recorded at upload.');
+      }
+    }
 
     // Build the signature-image map keyed by field id (drawn signatures only).
     const signerById = Object.fromEntries(signers.map((s) => [s.id, s]));
@@ -84,9 +97,20 @@ const finalizeEnvelope = async (envelopeId) => {
       }))
     });
 
-    const completedKey = storage.buildKey(`completed/${env.CreatedBy}`, `${doc.Name}-signed.pdf`);
-    await storage.putObject(completedKey, buffer, 'application/pdf');
+    // completedSha is always the PLAINTEXT hash of the signed PDF (what the
+    // certificate attests). If encrypted, re-encrypt with the same key before storing.
     const completedSha = storage.sha256(buffer);
+    let storedBuffer = buffer;
+    let contentType = 'application/pdf';
+    if (doc.Encrypted) {
+      storedBuffer = cryptoBox.encryptBuffer(buffer, documentKey);
+      contentType = 'application/octet-stream';
+    }
+    const completedKey = storage.buildKey(
+      `completed/${env.CreatedBy}`,
+      `${doc.Name}-signed.pdf${doc.Encrypted ? '.enc' : ''}`
+    );
+    await storage.putObject(completedKey, storedBuffer, contentType);
 
     await env.update(
       { Status: 'completed', CompletedAt: new Date(), CompletedFileKey: completedKey, CompletedSha256: completedSha },

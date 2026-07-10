@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import api from '../lib/api.js';
+import { ownerFileUrl } from '../lib/keystore.js';
 import { Document, Page } from '../lib/pdf.js';
 import { Spinner } from '../lib/ui.jsx';
 
@@ -126,7 +126,7 @@ function PageOverlay({ pageNumber, fields, onAdd, onMove, onRemove, activeType, 
  * parent. `signers` supplies the assignment palette (each field carries a
  * `signerEmail`). `colorFor(field)` decides the box color.
  */
-export default function FieldPlacer({ documentId, fields, setFields, activeType, setActiveType, activeSignerEmail, colorFor }) {
+export default function FieldPlacer({ documentId, doc, fields, setFields, activeType, setActiveType, activeSignerEmail, colorFor }) {
   const [pdfUrl, setPdfUrl] = useState(null);
   const [numPages, setNumPages] = useState(0);
   const [err, setErr] = useState(null);
@@ -138,10 +138,10 @@ export default function FieldPlacer({ documentId, fields, setFields, activeType,
     }
     let dead = false;
     setPdfUrl(null);
-    api
-      .get(`/documents/${documentId}/file`, { responseType: 'blob' })
-      .then((r) => {
-        if (!dead) setPdfUrl(URL.createObjectURL(r.data));
+    // Decrypts client-side when the document is encrypted.
+    ownerFileUrl(`/documents/${documentId}/file`, doc)
+      .then((url) => {
+        if (!dead) setPdfUrl(url);
       })
       .catch(() => setErr('Could not load the PDF.'));
     return () => {

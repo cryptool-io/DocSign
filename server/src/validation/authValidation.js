@@ -30,4 +30,11 @@ const verifyEmail = Joi.object({
   token: Joi.string().max(256).required()
 });
 
-module.exports = { register, login, refresh, forgotPassword, resetPassword, verifyEmail };
+const setupEncryption = Joi.object({
+  kdfSalt: Joi.string().max(128).required(),
+  wrappedAccountKey: Joi.string().max(2000).required(),
+  recoveryWrappedAccountKey: Joi.string().max(2000).allow(null, ''),
+  allowReplace: Joi.boolean().default(false)
+});
+
+module.exports = { register, login, refresh, forgotPassword, resetPassword, verifyEmail, setupEncryption };

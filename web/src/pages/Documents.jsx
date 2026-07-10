@@ -2,6 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import api, { apiError } from '../lib/api.js';
 import { useCompany, companyParam, withCompany } from '../lib/company.js';
+import * as keystore from '../lib/keystore.js';
+import { countPages } from '../lib/pdf.js';
+import { appendKey } from '../lib/linkkey.js';
 import { Spinner, useToast, fmtDate } from '../lib/ui.jsx';
 
 function LinkModal({ doc, onClose }) {
@@ -36,7 +39,13 @@ function LinkModal({ doc, onClose }) {
         expiresAt: form.expiresAt || null
       };
       const { data } = await api.post('/links', payload);
-      setCreated(data.data);
+      let created = data.data;
+      // For an encrypted document, put the decryption key in the link fragment.
+      if (doc.Encrypted && doc.WrappedDek) {
+        const dekB64 = await keystore.documentKeyB64(doc.WrappedDek);
+        created = { ...created, url: appendKey(created.url, dekB64) };
+      }
+      setCreated(created);
       toast('Share link created');
     } catch (err) {
       toast(apiError(err), 'err');
@@ -143,11 +152,24 @@ export default function Documents() {
     setUploading(true);
     try {
       const fd = new FormData();
-      fd.append('file', file);
-      fd.append('name', file.name);
+      const canEncrypt = await keystore.ensureUnlocked();
+      if (canEncrypt) {
+        // Encrypt in the browser; the server only ever sees ciphertext.
+        const pageCount = await countPages(await file.arrayBuffer());
+        const enc = await keystore.encryptDocument(file, pageCount);
+        fd.append('file', enc.ciphertextBlob, `${file.name}.enc`);
+        fd.append('name', file.name);
+        fd.append('encrypted', 'true');
+        fd.append('wrappedDek', enc.wrappedDek);
+        fd.append('sha256', enc.sha256);
+        fd.append('pageCount', String(enc.pageCount));
+      } else {
+        fd.append('file', file);
+        fd.append('name', file.name);
+      }
       if (activeId) fd.append('companyId', activeId);
       await api.post('/documents', fd);
-      toast('Uploaded');
+      toast(canEncrypt ? 'Uploaded (encrypted)' : 'Uploaded');
       load();
     } catch (err) {
       toast(apiError(err), 'err');

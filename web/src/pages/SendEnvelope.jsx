@@ -2,6 +2,8 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import api, { apiError } from '../lib/api.js';
 import { useCompany } from '../lib/company.js';
+import * as keystore from '../lib/keystore.js';
+import { appendKey } from '../lib/linkkey.js';
 import { Spinner, useToast } from '../lib/ui.jsx';
 import FieldPlacer, { FIELD_TYPES, SIGNER_COLORS } from '../components/FieldPlacer.jsx';
 
@@ -96,6 +98,14 @@ export default function SendEnvelope() {
     }
   }, [signers]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // An encrypted document must use link delivery: the server can't put the
+  // decryption key into an email (it never has the key).
+  const selectedDocument = docs.find((d) => d.id === documentId) || null;
+  const docEncrypted = Boolean(selectedDocument?.Encrypted);
+  useEffect(() => {
+    if (docEncrypted && deliveryMode === 'email') setDeliveryMode('link');
+  }, [docEncrypted]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Selected company drives the send-as address list.
   const selectedCompany = companies.find((c) => c.id === companyId) || null;
   useEffect(() => {
@@ -185,8 +195,14 @@ export default function SendEnvelope() {
       }
       const sendRes = await api.post(`/envelopes/${envelopeId}/send`);
       if (deliveryMode === 'link') {
-        // Show the copyable links instead of navigating away.
-        setResultLinks({ envelopeId, links: sendRes.data.links || [] });
+        // For an encrypted document, append the decryption key to each link.
+        let links = sendRes.data.links || [];
+        const selectedDoc = docs.find((d) => d.id === documentId);
+        if (selectedDoc?.Encrypted && selectedDoc.WrappedDek) {
+          const dekB64 = await keystore.documentKeyB64(selectedDoc.WrappedDek);
+          links = links.map((l) => ({ ...l, url: appendKey(l.url, dekB64) }));
+        }
+        setResultLinks({ envelopeId, links });
         toast('Signing links ready');
       } else {
         toast('Sent for signature');
@@ -415,6 +431,7 @@ export default function SendEnvelope() {
 
             <FieldPlacer
               documentId={documentId}
+              doc={docs.find((d) => d.id === documentId)}
               fields={fields}
               setFields={setFields}
               activeType={activeType}
@@ -443,10 +460,15 @@ export default function SendEnvelope() {
         <div className="row">
           <div className="field">
             <label>How to deliver</label>
-            <select className="select" value={deliveryMode} onChange={(e) => setDeliveryMode(e.target.value)}>
-              <option value="email">Email the signer a link</option>
+            <select className="select" value={deliveryMode} onChange={(e) => setDeliveryMode(e.target.value)} disabled={docEncrypted}>
+              {!docEncrypted && <option value="email">Email the signer a link</option>}
               <option value="link">Just give me a link to share</option>
             </select>
+            {docEncrypted && (
+              <p className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+                This document is end-to-end encrypted, so it's shared by link (the key stays out of email).
+              </p>
+            )}
           </div>
           {selectedCompany && selectedCompany.emails.length > 0 && (
             <div className="field">

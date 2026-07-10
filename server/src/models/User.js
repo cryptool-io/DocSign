@@ -26,7 +26,14 @@ module.exports = (sequelize, DataTypes) => {
         company: this.Company,
         role: this.Role,
         emailVerified: this.isVerified,
-        createdAt: this.createdAt
+        createdAt: this.createdAt,
+        // Non-secret key material the client needs to unlock its encrypted docs.
+        encryption: {
+          enabled: Boolean(this.WrappedAccountKey),
+          kdfSalt: this.KdfSalt || null,
+          wrappedAccountKey: this.WrappedAccountKey || null,
+          hasRecoveryKey: Boolean(this.RecoveryWrappedAccountKey)
+        }
       };
     }
   }
@@ -50,7 +57,11 @@ module.exports = (sequelize, DataTypes) => {
       ResetToken: { type: DataTypes.STRING, allowNull: true },
       ResetTokenExpiresAt: { type: DataTypes.DATE, allowNull: true },
       LastLoginAt: { type: DataTypes.DATE, allowNull: true },
-      DisabledAt: { type: DataTypes.DATE, allowNull: true }
+      DisabledAt: { type: DataTypes.DATE, allowNull: true },
+      // Zero-knowledge encryption key material (server can't derive plaintext keys).
+      KdfSalt: { type: DataTypes.STRING, allowNull: true },
+      WrappedAccountKey: { type: DataTypes.TEXT, allowNull: true },
+      RecoveryWrappedAccountKey: { type: DataTypes.TEXT, allowNull: true }
     },
     {
       sequelize,

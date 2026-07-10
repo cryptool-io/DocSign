@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import axios from 'axios';
 import { Document, Page } from '../../lib/pdf.js';
+import { decryptToBlob } from '../../lib/keystore.js';
+import { keyFromHash } from '../../lib/linkkey.js';
 import { Spinner } from '../../lib/ui.jsx';
 
 const pub = axios.create({ baseURL: '/api' });
@@ -78,16 +80,22 @@ export default function PublicSign() {
     }
   };
 
-  // Once verified, load fields + PDF.
+  // Once verified, load fields + PDF (decrypting if the doc is encrypted).
   useEffect(() => {
     if (!signerToken) return;
     (async () => {
       const [f, file] = await Promise.all([
         pub.get(`/sign/${token}/fields`, auth()),
-        pub.get(`/sign/${token}/file`, { ...auth(), responseType: 'blob' })
+        pub.get(`/sign/${token}/file`, { ...auth(), responseType: 'arraybuffer' })
       ]);
       setFields(f.data.data);
-      setPdfUrl(URL.createObjectURL(file.data));
+      if (file.headers['x-docsign-encrypted'] === 'true') {
+        const dekB64 = keyFromHash();
+        if (!dekB64) return setError('This signing link is missing its decryption key.');
+        setPdfUrl(URL.createObjectURL(await decryptToBlob(file.data, dekB64)));
+      } else {
+        setPdfUrl(URL.createObjectURL(new Blob([file.data], { type: 'application/pdf' })));
+      }
       setStage('sign');
     })().catch(() => setError('Could not load the document.'));
   }, [signerToken]);
@@ -102,6 +110,9 @@ export default function PublicSign() {
         consent: true,
         signatureType: 'typed',
         signatureData: typedName,
+        // For an encrypted document, hand the server the key (from the link
+        // fragment) once, over TLS, so it can decrypt-to-stamp. Never stored.
+        documentKey: keyFromHash() || null,
         values: nonSigFields.map((f) => ({ fieldId: f.id, value: f.type === 'checkbox' ? (values[f.id] ? 'x' : '') : values[f.id] || '' }))
       };
       // If this browser is also logged into an app account, pass its token so the

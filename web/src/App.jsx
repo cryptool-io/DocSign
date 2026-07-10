@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { ToastProvider, Spinner } from './lib/ui.jsx';
 import { useAuth } from './lib/store.js';
+import RecoveryKeyModal from './components/RecoveryKeyModal.jsx';
 
 import Login from './pages/Login.jsx';
 import Register from './pages/Register.jsx';
@@ -41,6 +42,7 @@ export default function App() {
 
   return (
     <ToastProvider>
+      <RecoveryKeyModal />
       <Routes>
         {/* Public recipient surface */}
         <Route path="/v/:token" element={<PublicView />} />

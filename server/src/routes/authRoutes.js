@@ -24,5 +24,8 @@ router.post('/verify-email', validate(schemas.verifyEmail), controller.verifyEma
 router.post('/forgot-password', authLimiter, validate(schemas.forgotPassword), controller.forgotPassword);
 router.post('/reset-password', authLimiter, validate(schemas.resetPassword), controller.resetPassword);
 router.get('/me', requireAuth, controller.me);
+router.post('/encryption/setup', requireAuth, validate(schemas.setupEncryption), controller.setupEncryption);
+router.get('/encryption/recovery', requireAuth, controller.recoveryBlob);
 
 module.exports = router;
+

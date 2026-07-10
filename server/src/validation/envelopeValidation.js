@@ -56,6 +56,9 @@ const submit = Joi.object({
   signatureType: Joi.string().valid('typed', 'drawn').required(),
   // For 'drawn': a PNG data URL. For 'typed': the typed name string.
   signatureData: Joi.string().max(2_000_000).required(),
+  // For encrypted documents: the raw DEK (base64) from the signing link fragment,
+  // sent once over TLS so the server can decrypt-to-stamp. Never stored.
+  documentKey: Joi.string().max(128).allow(null, ''),
   values: Joi.array()
     .items(
       Joi.object({

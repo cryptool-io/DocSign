@@ -224,11 +224,16 @@ exports.fields = asyncHandler(async (req, res) => {
   });
 });
 
-/** Authorized: stream the PDF to a verified signer. */
+/** Authorized: stream the PDF to a verified signer (ciphertext if encrypted). */
 exports.file = asyncHandler(async (req, res) => {
   const { env } = await authorizeSigner(req);
   const doc = await DocDocument.findByPk(env.DocDocumentId);
   const buffer = await storage.getObject(doc.FileKey);
+  if (doc.Encrypted) {
+    res.setHeader('Content-Type', 'application/octet-stream');
+    res.setHeader('X-Docsign-Encrypted', 'true');
+    return res.send(buffer);
+  }
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', 'inline');
   res.send(buffer);
@@ -264,7 +269,13 @@ exports.submit = asyncHandler(async (req, res) => {
   assertSignable(env, signer);
   if (!(await isSignerTurn(env, signer))) throw forbidden('It is not your turn to sign yet.', 'not_your_turn');
 
-  const { consent, signatureType, signatureData, values } = req.body;
+  const { consent, signatureType, signatureData, values, documentKey } = req.body;
+
+  // An encrypted document can only be finalized (stamped) with its key.
+  const doc = await DocDocument.findByPk(env.DocDocumentId);
+  if (doc?.Encrypted && !documentKey) {
+    throw badRequest('This document is encrypted; a document key is required to sign.', 'no_document_key');
+  }
   const ip = clientIp(req);
   const ua = req.headers['user-agent'] || null;
   const signedByUserId = await resolveSignedByUser(req, signer.Email);
@@ -347,7 +358,7 @@ exports.submit = asyncHandler(async (req, res) => {
   });
 
   if (remaining.length === 0) {
-    const finalized = await finalizeEnvelope(env.id);
+    const finalized = await finalizeEnvelope(env.id, { documentKey: documentKey || null });
     // Notify the sender + all signers that it's complete.
     const owner = await sequelize.models.User.findByPk(env.CreatedBy);
     const allSigners = await DocEnvelopeSigner.findAll({ where: { DocEnvelopeId: env.id } });

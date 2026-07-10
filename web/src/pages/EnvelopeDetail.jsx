@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import api, { apiError } from '../lib/api.js';
+import { ownerDecryptToBlob } from '../lib/keystore.js';
 import { Spinner, Badge, useToast, fmtDate } from '../lib/ui.jsx';
 
 export default function EnvelopeDetail() {
@@ -54,8 +55,16 @@ export default function EnvelopeDetail() {
   };
 
   const download = async () => {
-    const r = await api.get(`/envelopes/${id}/completed-file`, { responseType: 'blob' });
-    const url = URL.createObjectURL(r.data);
+    const r = await api.get(`/envelopes/${id}/completed-file`, { responseType: 'arraybuffer' });
+    let blob;
+    if (r.headers['x-docsign-encrypted'] === 'true') {
+      // Fetch the document to get its wrapped key, then decrypt the signed copy.
+      const { data } = await api.get(`/documents/${env.documentId}`);
+      blob = await ownerDecryptToBlob(r.data, data.data.WrappedDek);
+    } else {
+      blob = new Blob([r.data], { type: 'application/pdf' });
+    }
+    const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
     a.download = `${env.subject}-signed.pdf`;

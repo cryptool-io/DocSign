@@ -28,7 +28,12 @@ module.exports = (sequelize, DataTypes) => {
       Sha256: { type: DataTypes.STRING(64), allowNull: false },
       Version: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 1 },
       ParentDocumentId: { type: DataTypes.UUID, allowNull: true },
-      ArchivedAt: { type: DataTypes.DATE, allowNull: true }
+      ArchivedAt: { type: DataTypes.DATE, allowNull: true },
+      // Zero-knowledge encryption: FileKey points at ciphertext; WrappedDek is the
+      // document key wrapped by the owner's account key (server can't unwrap it).
+      Encrypted: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
+      WrappedDek: { type: DataTypes.TEXT, allowNull: true },
+      EncAlgo: { type: DataTypes.STRING, allowNull: true }
     },
     { sequelize, modelName: 'DocDocument', tableName: 'DocDocuments', timestamps: true }
   );

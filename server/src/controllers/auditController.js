@@ -31,11 +31,18 @@ exports.trail = asyncHandler(async (req, res) => {
   });
 });
 
-/** Download the completed (stamped + certificate) PDF. */
+/** Download the completed (stamped + certificate) PDF — ciphertext if encrypted. */
 exports.completedFile = asyncHandler(async (req, res) => {
   const env = await ownEnvelope(req);
   if (!env.CompletedFileKey) throw badRequest('This envelope is not completed yet.', 'not_completed');
   const buffer = await storage.getObject(env.CompletedFileKey);
+  const doc = await require('../models').DocDocument.findByPk(env.DocDocumentId);
+  if (doc?.Encrypted) {
+    // Owner decrypts client-side (they can unwrap the document key via their account key).
+    res.setHeader('Content-Type', 'application/octet-stream');
+    res.setHeader('X-Docsign-Encrypted', 'true');
+    return res.send(buffer);
+  }
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(env.Subject)}-signed.pdf"`);
   res.send(buffer);

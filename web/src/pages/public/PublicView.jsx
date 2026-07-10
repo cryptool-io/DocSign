@@ -2,6 +2,8 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import axios from 'axios';
 import { Document, Page } from '../../lib/pdf.js';
+import { decryptToBlob } from '../../lib/keystore.js';
+import { keyFromHash } from '../../lib/linkkey.js';
 import { Spinner } from '../../lib/ui.jsx';
 
 // Standalone axios (no app auth interceptors) for the public surface.
@@ -51,15 +53,26 @@ export default function PublicView() {
     }
   };
 
-  // Fetch the PDF once we have a session.
+  // Fetch the PDF once we have a session. If it's encrypted, decrypt with the
+  // key from the link fragment (which never reached the server).
   useEffect(() => {
     if (!session?.linkId) return;
     pub
       .get(`/view/link/${session.linkId}/file`, {
-        responseType: 'blob',
+        responseType: 'arraybuffer',
         headers: { Authorization: `Bearer ${session.viewerToken}` }
       })
-      .then((r) => setPdfUrl(URL.createObjectURL(r.data)))
+      .then(async (r) => {
+        const encrypted = r.headers['x-docsign-encrypted'] === 'true';
+        if (encrypted) {
+          const dekB64 = keyFromHash();
+          if (!dekB64) return setError('This link is missing its decryption key.');
+          const blob = await decryptToBlob(r.data, dekB64);
+          setPdfUrl(URL.createObjectURL(blob));
+        } else {
+          setPdfUrl(URL.createObjectURL(new Blob([r.data], { type: 'application/pdf' })));
+        }
+      })
       .catch(() => setError('Could not load the document.'));
   }, [session]);
 

@@ -23,13 +23,26 @@ exports.upload = asyncHandler(async (req, res) => {
   if (!req.file) throw badRequest('No file uploaded. Send a PDF as multipart field "file".', 'no_file');
   const buffer = req.file.buffer;
 
-  if (!pdf.looksLikePdf(buffer)) throw badRequest('Only PDF files are supported.', 'not_pdf');
+  // Encrypted uploads arrive as ciphertext: the browser has already encrypted the
+  // PDF and computed its plaintext hash + page count (the server can't read it).
+  const isEncrypted = req.body.encrypted === 'true' || req.body.encrypted === true;
 
   let pageCount;
-  try {
-    pageCount = await pdf.getPageCount(buffer);
-  } catch {
-    throw badRequest('That file could not be read as a valid PDF.', 'bad_pdf');
+  let sha256;
+  if (isEncrypted) {
+    if (!req.body.wrappedDek) throw badRequest('Encrypted upload requires wrappedDek.', 'no_wrapped_dek');
+    const claimedSha = String(req.body.sha256 || '');
+    if (!/^[0-9a-f]{64}$/.test(claimedSha)) throw badRequest('Encrypted upload requires a valid sha256.', 'bad_sha');
+    pageCount = parseInt(req.body.pageCount || '0', 10) || 0;
+    sha256 = claimedSha; // client-asserted; re-verified server-side at signing (decrypt-to-stamp)
+  } else {
+    if (!pdf.looksLikePdf(buffer)) throw badRequest('Only PDF files are supported.', 'not_pdf');
+    try {
+      pageCount = await pdf.getPageCount(buffer);
+    } catch {
+      throw badRequest('That file could not be read as a valid PDF.', 'bad_pdf');
+    }
+    sha256 = storage.sha256(buffer);
   }
 
   const { projectId, name } = req.body;
@@ -39,14 +52,12 @@ exports.upload = asyncHandler(async (req, res) => {
     if (!project) throw badRequest('Project not found.', 'bad_project');
     inheritedCompanyId = project.DocCompanyId;
   }
-  // Explicit companyId wins; otherwise inherit from the project.
   const companyId = req.body.companyId
     ? await resolveCompanyId(req.userId, req.body.companyId)
     : inheritedCompanyId;
 
-  const sha256 = storage.sha256(buffer);
-  const key = storage.buildKey(`documents/${req.userId}`, req.file.originalname || 'document.pdf');
-  await storage.putObject(key, buffer, 'application/pdf');
+  const key = storage.buildKey(`documents/${req.userId}`, `${req.file.originalname || 'document.pdf'}${isEncrypted ? '.enc' : ''}`);
+  await storage.putObject(key, buffer, isEncrypted ? 'application/octet-stream' : 'application/pdf');
 
   const doc = await DocDocument.create({
     DocProjectId: projectId || null,
@@ -59,7 +70,10 @@ exports.upload = asyncHandler(async (req, res) => {
     SizeBytes: buffer.length,
     PageCount: pageCount,
     Sha256: sha256,
-    Version: 1
+    Version: 1,
+    Encrypted: isEncrypted,
+    WrappedDek: isEncrypted ? req.body.wrappedDek : null,
+    EncAlgo: isEncrypted ? 'AES-256-GCM' : null
   });
 
   res.status(201).json({ data: doc });

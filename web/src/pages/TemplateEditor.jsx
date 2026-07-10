@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import api, { apiError, getAccessToken } from '../lib/api.js';
 import { withCompany } from '../lib/company.js';
+import { ownerFileUrl } from '../lib/keystore.js';
 import { Document, Page } from '../lib/pdf.js';
 import { Spinner, useToast } from '../lib/ui.jsx';
 
@@ -102,21 +103,20 @@ export default function TemplateEditor() {
     })();
   }, [id]);
 
-  // Fetch the chosen PDF as a blob (with auth header) for react-pdf.
+  // Fetch the chosen PDF (decrypting client-side if it's encrypted) for react-pdf.
   useEffect(() => {
     if (!documentId) return setPdfData(null);
     let revoked = false;
-    api
-      .get(`/documents/${documentId}/file`, { responseType: 'blob' })
-      .then((r) => {
-        if (revoked) return;
-        setPdfData(URL.createObjectURL(r.data));
+    const doc = docs.find((d) => d.id === documentId);
+    ownerFileUrl(`/documents/${documentId}/file`, doc)
+      .then((url) => {
+        if (!revoked) setPdfData(url);
       })
       .catch(() => toast('Could not load PDF', 'err'));
     return () => {
       revoked = true;
     };
-  }, [documentId]);
+  }, [documentId, docs]);
 
   const addField = (f) => {
     setFields((cur) => [...cur, { ...f, _id: Math.random().toString(36).slice(2), required: true }]);

@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import api, { apiError } from '../lib/api.js';
 import { Spinner, useToast } from '../lib/ui.jsx';
+import FieldPlacer, { FIELD_TYPES, SIGNER_COLORS } from '../components/FieldPlacer.jsx';
 
 /**
  * The compose flow: pick a project + document + template, choose the people who
@@ -27,6 +28,13 @@ export default function SendEnvelope() {
   const [message, setMessage] = useState('');
   const [order, setOrder] = useState('parallel');
   const [signers, setSigners] = useState([{ name: '', email: '', signerRole: '', signingOrder: 1 }]);
+
+  // Inline field placement (DocuSign-style). Each field carries a signerEmail so
+  // the backend binds it to the right person; falls back to template fields if
+  // none are placed here.
+  const [fields, setFields] = useState([]);
+  const [activeType, setActiveType] = useState(null);
+  const [activeSignerEmail, setActiveSignerEmail] = useState('');
 
   useEffect(() => {
     (async () => {
@@ -63,6 +71,24 @@ export default function SendEnvelope() {
     if (tpl?.SourceDocumentId && !documentId) setDocumentId(tpl.SourceDocumentId);
   }, [templateId]);
 
+  // Signers with a usable email drive the placement palette + color coding.
+  const placeableSigners = signers.filter((s) => s.email);
+  const colorByEmail = useMemo(() => {
+    const m = {};
+    placeableSigners.forEach((s, i) => {
+      m[s.email] = SIGNER_COLORS[i % SIGNER_COLORS.length];
+    });
+    return m;
+  }, [signers]);
+  const colorFor = (field) => colorByEmail[field.signerEmail] || '#697280';
+
+  // Keep the active placement signer valid as the signer list changes.
+  useEffect(() => {
+    if (!placeableSigners.some((s) => s.email === activeSignerEmail)) {
+      setActiveSignerEmail(placeableSigners[0]?.email || '');
+    }
+  }, [signers]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const filteredDocs = projectId ? docs.filter((d) => d.DocProjectId === projectId) : docs;
   const setSigner = (i, k, v) => setSigners((s) => s.map((row, idx) => (idx === i ? { ...row, [k]: v } : row)));
   const addSigner = () => setSigners((s) => [...s, { name: '', email: '', signerRole: '', signingOrder: s.length + 1 }]);
@@ -94,8 +120,25 @@ export default function SendEnvelope() {
     const valid = signers.filter((s) => s.name && s.email);
     if (valid.length === 0) return toast('Add at least one signer with a name and email.', 'err');
 
+    // Every placed field must be assigned to a signer who's still in the list.
+    const validEmails = new Set(valid.map((s) => s.email));
+    const orphan = fields.find((f) => !f.signerEmail || !validEmails.has(f.signerEmail));
+    if (orphan) return toast('Every placed field must be assigned to a signer.', 'err');
+
     setSending(true);
     try {
+      const placedFields = fields.map((f) => ({
+        type: f.type,
+        signerEmail: f.signerEmail,
+        pageNumber: f.pageNumber,
+        x: f.x,
+        y: f.y,
+        width: f.width,
+        height: f.height,
+        required: f.required !== false,
+        label: f.label || null
+      }));
+
       const { data } = await api.post('/envelopes', {
         documentId,
         templateId: templateId || null,
@@ -103,6 +146,8 @@ export default function SendEnvelope() {
         subject,
         message: message || null,
         signingOrder: order,
+        // Explicit fields win; if none are placed, the backend copies the template's.
+        ...(placedFields.length ? { fields: placedFields } : {}),
         signers: valid.map((s) => ({
           recipientId: s.recipientId || null,
           name: s.name,
@@ -240,7 +285,71 @@ export default function SendEnvelope() {
       </div>
 
       <div className="card mb">
-        <h2>3 · Message</h2>
+        <div className="flex between mb">
+          <div>
+            <h2 style={{ margin: 0 }}>3 · Place fields</h2>
+            <p className="muted" style={{ margin: '2px 0 0' }}>
+              Pick a signer and a field type, then click on the page to drop it. Drag to reposition.
+            </p>
+          </div>
+          {fields.length > 0 && (
+            <button className="btn sm" onClick={() => setFields([])}>
+              Clear all
+            </button>
+          )}
+        </div>
+
+        {placeableSigners.length === 0 ? (
+          <div className="empty">Add a signer with an email above to start placing fields.</div>
+        ) : !documentId ? (
+          <div className="empty">Choose a document above.</div>
+        ) : (
+          <>
+            <div className="flex" style={{ flexWrap: 'wrap', gap: 10, marginBottom: 8 }}>
+              <span className="muted">Signer:</span>
+              {placeableSigners.map((s) => (
+                <button
+                  key={s.email}
+                  className={`btn sm ${activeSignerEmail === s.email ? 'primary' : ''}`}
+                  onClick={() => setActiveSignerEmail(s.email)}
+                  style={{ borderLeft: `4px solid ${colorByEmail[s.email]}` }}
+                >
+                  {s.name || s.email}
+                </button>
+              ))}
+            </div>
+            <div className="flex" style={{ flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
+              <span className="muted">Field:</span>
+              {FIELD_TYPES.map((ft) => (
+                <button
+                  key={ft.type}
+                  className={`btn sm ${activeType === ft.type ? 'primary' : ''}`}
+                  onClick={() => setActiveType(activeType === ft.type ? null : ft.type)}
+                >
+                  {ft.label}
+                </button>
+              ))}
+              {activeType && <span className="badge blue">Click the page to place</span>}
+              <span className="muted" style={{ marginLeft: 'auto' }}>
+                {fields.length} field{fields.length === 1 ? '' : 's'} placed
+              </span>
+            </div>
+
+            <FieldPlacer
+              documentId={documentId}
+              fields={fields}
+              setFields={setFields}
+              activeType={activeType}
+              setActiveType={setActiveType}
+              activeSignerEmail={activeSignerEmail}
+              colorFor={colorFor}
+            />
+          </>
+        )}
+      </div>
+
+      <div className="card mb">
+        <h2>4 · Message</h2>
         <div className="field">
           <label>Subject</label>
           <input className="input" value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Please sign: Mutual NDA" />

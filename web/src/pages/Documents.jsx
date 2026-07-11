@@ -162,6 +162,17 @@ export default function Documents() {
     }
   };
 
+  const removeDocument = async (id, name) => {
+    if (!confirm(`Delete "${name}"? It's removed from your Documents list (sent envelopes keep their own copy).`)) return;
+    try {
+      await api.delete(`/documents/${id}`);
+      toast('Document deleted');
+      load();
+    } catch (err) {
+      toast(apiError(err), 'err');
+    }
+  };
+
   const upload = async (file) => {
     if (!file) return;
     if (file.type !== 'application/pdf') return toast('Please choose a PDF.', 'err');
@@ -313,6 +324,9 @@ export default function Documents() {
                             Analytics
                           </button>
                         )}
+                        <button className="btn sm danger" title="Delete this document" onClick={() => removeDocument(d.id, d.Name)}>
+                          Delete
+                        </button>
                       </div>
                     </td>
                   </tr>

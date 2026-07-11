@@ -34,6 +34,8 @@ module.exports = (sequelize, DataTypes) => {
       // Text style for stamped text/date fields.
       FontSize: { type: DataTypes.INTEGER, allowNull: true },
       Font: { type: DataTypes.STRING, allowNull: true },
+      // Signature fields: 'any' | 'type' | 'draw' (how the signer must sign).
+      SignatureMode: { type: DataTypes.STRING, allowNull: true },
       Label: { type: DataTypes.STRING, allowNull: true },
       Value: { type: DataTypes.TEXT, allowNull: true }
     },

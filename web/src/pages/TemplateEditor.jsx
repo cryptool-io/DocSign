@@ -264,6 +264,7 @@ export default function TemplateEditor() {
           autoFill: f.type === 'date' ? f.autoFill === true : false,
           fontSize: TEXTY(f.type) ? f.fontSize || 11 : null,
           font: TEXTY(f.type) ? f.font || 'Helvetica' : null,
+          signatureMode: f.type === 'signature' ? f.signatureMode || 'any' : null,
           label: f.label || null
         }))
       };
@@ -392,6 +393,16 @@ export default function TemplateEditor() {
                       {signers.map((s, i) => (<option key={s.key} value={s.key}>{s.label || `Signer ${i + 1}`}</option>))}
                     </select>
                   </div>
+                  {selected.type === 'signature' && (
+                    <div className="field" style={{ marginBottom: 0 }}>
+                      <label>Signature style</label>
+                      <select className="select" value={selected.signatureMode || 'any'} onChange={(e) => patchField(selected._id, { signatureMode: e.target.value })}>
+                        <option value="any">Type or draw (signer chooses)</option>
+                        <option value="draw">Must hand-draw</option>
+                        <option value="type">Typed name only</option>
+                      </select>
+                    </div>
+                  )}
                   {selected.type === 'text' && (
                     <div className="field" style={{ marginBottom: 0 }}>
                       <label>What is this box for?</label>

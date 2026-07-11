@@ -34,6 +34,21 @@ export default function PublicSign() {
   const initialsReady = initMode === 'draw' ? !!drawnInitials : !!typedInitials.trim();
   const hasInitialsFields = fields.some((f) => f.type === 'initials');
 
+  // Required signature style set by the sender: 'draw' (must hand-draw), 'type'
+  // (typed name only), or 'any'. Draw wins if fields disagree.
+  const sigConstraint = fields
+    .filter((f) => f.type === 'signature')
+    .reduce((acc, f) => {
+      const m = f.signatureMode || 'any';
+      if (m === 'draw') return 'draw';
+      if (m === 'type' && acc !== 'draw') return 'type';
+      return acc;
+    }, 'any');
+  useEffect(() => {
+    if (sigConstraint === 'draw' && sigMode !== 'draw') setSigMode('draw');
+    if (sigConstraint === 'type' && sigMode !== 'type') setSigMode('type');
+  }, [sigConstraint]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const auth = (extra = {}) => ({ headers: { Authorization: `Bearer ${signerToken}`, ...extra } });
 
   useEffect(() => {
@@ -258,21 +273,31 @@ export default function PublicSign() {
 
       <div className="card mb">
         <div className="flex" style={{ gap: 8, marginBottom: 12 }}>
-          <button
-            type="button"
-            className={`btn ${sigMode === 'type' ? 'primary' : ''}`}
-            onClick={() => setSigMode('type')}
-          >
-            Type signature
-          </button>
-          <button
-            type="button"
-            className={`btn ${sigMode === 'draw' ? 'primary' : ''}`}
-            onClick={() => setSigMode('draw')}
-          >
-            Draw signature
-          </button>
+          {sigConstraint !== 'draw' && (
+            <button
+              type="button"
+              className={`btn ${sigMode === 'type' ? 'primary' : ''}`}
+              onClick={() => setSigMode('type')}
+            >
+              Type signature
+            </button>
+          )}
+          {sigConstraint !== 'type' && (
+            <button
+              type="button"
+              className={`btn ${sigMode === 'draw' ? 'primary' : ''}`}
+              onClick={() => setSigMode('draw')}
+            >
+              Draw signature
+            </button>
+          )}
         </div>
+        {sigConstraint === 'draw' && (
+          <p className="muted" style={{ fontSize: 12, marginBottom: 10 }}>This document requires a hand-drawn signature.</p>
+        )}
+        {sigConstraint === 'type' && (
+          <p className="muted" style={{ fontSize: 12, marginBottom: 10 }}>This document requires your typed name as the signature.</p>
+        )}
 
         {sigMode === 'type' ? (
           <div className="field" style={{ marginBottom: 0 }}>

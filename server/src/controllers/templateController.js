@@ -36,6 +36,7 @@ const serialize = (tpl) => ({
     autoFill: f.AutoFill,
     fontSize: f.FontSize,
     font: f.Font,
+    signatureMode: f.SignatureMode,
     label: f.Label
   }))
 });
@@ -78,6 +79,7 @@ const fieldRows = (templateId, fields) =>
     AutoFill: f.autoFill === true,
     FontSize: f.fontSize || null,
     Font: f.font || null,
+    SignatureMode: f.signatureMode || null,
     Label: f.label || null
   }));
 

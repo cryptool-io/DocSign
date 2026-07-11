@@ -273,6 +273,9 @@ exports.fields = asyncHandler(async (req, res) => {
       height: f.Height,
       required: f.Required,
       autoFill: f.AutoFill,
+      signatureMode: f.SignatureMode || 'any',
+      fontSize: f.FontSize,
+      font: f.Font,
       label: f.Label
     }))
   });
@@ -347,6 +350,16 @@ exports.submit = asyncHandler(async (req, res) => {
     if (f.Required && !autoFilled && (provided === undefined || provided === null || provided === '')) {
       throw badRequest(`Please complete the "${f.Label || f.Type}" field.`, 'missing_field');
     }
+  }
+
+  // Enforce the required signature style: if any signature field demands a drawn
+  // signature the signer must draw it; if it demands a typed name, they must type.
+  const sigModes = fields.filter((f) => f.Type === 'signature').map((f) => f.SignatureMode || 'any');
+  if (sigModes.includes('draw') && signatureType !== 'drawn') {
+    throw badRequest('This document requires a hand-drawn signature.', 'signature_must_draw');
+  }
+  if (sigModes.includes('type') && signatureType !== 'typed') {
+    throw badRequest('This document requires your typed name as the signature.', 'signature_must_type');
   }
 
   const nowIso = new Date().toISOString().slice(0, 10);

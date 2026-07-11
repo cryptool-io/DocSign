@@ -230,6 +230,7 @@ exports.create = asyncHandler(async (req, res) => {
       autoFill: f.AutoFill,
       fontSize: f.FontSize,
       font: f.Font,
+      signatureMode: f.SignatureMode,
       label: f.Label
     }));
 
@@ -299,6 +300,7 @@ exports.create = asyncHandler(async (req, res) => {
         AutoFill: f.autoFill === true,
         FontSize: f.fontSize || null,
         Font: f.font || null,
+        SignatureMode: f.signatureMode || null,
         Label: f.label || null
       });
     }

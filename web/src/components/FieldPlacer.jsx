@@ -256,6 +256,16 @@ export default function FieldPlacer({ documentId, doc, fields, setFields, active
                 <input type="checkbox" checked={selected.required !== false} onChange={(e) => patchField(selected._id, { required: e.target.checked })} />
                 Mandatory (required to sign)
               </label>
+              {selected.type === 'signature' && (
+                <div className="field" style={{ marginBottom: 0 }}>
+                  <label>Signature style</label>
+                  <select className="select" value={selected.signatureMode || 'any'} onChange={(e) => patchField(selected._id, { signatureMode: e.target.value })}>
+                    <option value="any">Type or draw (signer chooses)</option>
+                    <option value="draw">Must hand-draw</option>
+                    <option value="type">Typed name only</option>
+                  </select>
+                </div>
+              )}
               {selected.type === 'text' && (
                 <div className="field" style={{ marginBottom: 0 }}>
                   <label>What is this box for?</label>

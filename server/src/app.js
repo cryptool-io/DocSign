@@ -14,6 +14,14 @@ const { errorHandler, notFoundHandler } = require('./middleware/errorHandler');
 const app = express();
 const PORT = parseInt(process.env.PORT || '4400', 10);
 
+// Deployed commit, read once at boot — lets /api/health confirm auto-deploys.
+let COMMIT = 'unknown';
+try {
+  COMMIT = require('child_process').execSync('git rev-parse --short HEAD', { cwd: path.resolve(__dirname, '../..') }).toString().trim();
+} catch {
+  /* not a git checkout */
+}
+
 app.set('trust proxy', 1); // behind nginx on the server
 
 app.use(
@@ -44,7 +52,7 @@ app.use(express.json({ limit: '2mb', verify: (req, _res, buf) => { req.rawBody =
 app.use(express.urlencoded({ extended: true }));
 if (process.env.NODE_ENV !== 'test') app.use(morgan('dev'));
 
-app.get('/api/health', (_req, res) => res.json({ ok: true, service: 'cto-docsign', time: new Date().toISOString() }));
+app.get('/api/health', (_req, res) => res.json({ ok: true, service: 'cto-docsign', commit: COMMIT, time: new Date().toISOString() }));
 
 // --- API routers ---------------------------------------------------------
 app.use('/api/auth', require('./routes/authRoutes'));

@@ -10,8 +10,11 @@ const { badRequest } = require('./http');
 const resolveCompanyId = async (ownerId, companyId) => {
   if (!companyId) return null;
   const company = await DocCompany.findOne({ where: { id: companyId, OwnerId: ownerId, ArchivedAt: null } });
-  if (!company) throw badRequest('Company not found.', 'bad_company');
-  return company.id;
+  if (company) return company.id;
+  // A member of a shared workspace may also create/act within it.
+  const { isCompanyMember } = require('./access');
+  if (await isCompanyMember(ownerId, companyId)) return companyId;
+  throw badRequest('Company not found.', 'bad_company');
 };
 
 /**

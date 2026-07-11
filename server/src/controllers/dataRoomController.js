@@ -3,7 +3,8 @@ const { DocDataRoom, DocDataRoomItem, DocDocument, DocViewSession, DocPageView, 
 const { generateOpaqueToken } = require('../services/docroom/tokens');
 const { APP_BASE_URL } = require('../services/email');
 const { asyncHandler, notFound, badRequest } = require('../utils/http');
-const { resolveCompanyId, companyFilter } = require('../utils/companyScope');
+const { resolveCompanyId } = require('../utils/companyScope');
+const { listScope } = require('../utils/access');
 
 const publicUrl = (token) => `${APP_BASE_URL}/room/${token}`;
 
@@ -40,7 +41,7 @@ const withItems = (id, ownerId) =>
   });
 
 exports.list = asyncHandler(async (req, res) => {
-  const where = { OwnerId: req.userId, ...companyFilter(req.query) };
+  const where = { ...(await listScope(req.userId, req.query)) };
   if (req.query.projectId) where.DocProjectId = req.query.projectId;
   const rooms = await DocDataRoom.findAll({
     where,

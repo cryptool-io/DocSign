@@ -1,10 +1,12 @@
 const fs = require('fs');
 const path = require('path');
-const { DocCompany, DocCompanyEmail, sequelize } = require('../models');
+const { Op } = require('sequelize');
+const { DocCompany, DocCompanyEmail, DocCompanyMember, User, sequelize } = require('../models');
 const { asyncHandler, notFound, badRequest, conflict } = require('../utils/http');
 const { slugify } = require('../utils/misc');
 const { systemCanSendFrom, SYSTEM_DOMAIN, verifySmtp } = require('../services/email');
 const { encryptSecret } = require('../services/secretStore');
+const { memberCompanyIds } = require('../utils/access');
 
 const LOGO_DIR = path.resolve(__dirname, '../../storage/logos');
 const APP_BASE_URL = (process.env.APP_BASE_URL || '').replace(/\/+$/, '');
@@ -48,12 +50,14 @@ const withEmails = (id, ownerId) =>
   });
 
 exports.list = asyncHandler(async (req, res) => {
+  // Workspaces the user owns OR is a member of (shared team access).
+  const memberIds = await memberCompanyIds(req.userId);
   const companies = await DocCompany.findAll({
-    where: { OwnerId: req.userId, ArchivedAt: null },
+    where: { ArchivedAt: null, [Op.or]: [{ OwnerId: req.userId }, { id: { [Op.in]: memberIds } }] },
     include: [{ model: DocCompanyEmail, as: 'Emails' }],
     order: [['createdAt', 'ASC']]
   });
-  res.json({ data: companies.map(serialize) });
+  res.json({ data: companies.map((c) => ({ ...serialize(c), isOwner: c.OwnerId === req.userId })) });
 });
 
 exports.get = asyncHandler(async (req, res) => {
@@ -163,6 +167,48 @@ exports.setDefaultEmail = asyncHandler(async (req, res) => {
     await email.update({ IsDefault: true }, { transaction: t });
   });
   res.json({ data: serialize(await withEmails(company.id, req.userId)) });
+});
+
+/* ---- Team members ------------------------------------------------------- */
+
+// Members of a workspace + its owner. Only the owner manages members (withEmails
+// resolves owner-only).
+exports.listMembers = asyncHandler(async (req, res) => {
+  const company = await withEmails(req.params.id, req.userId);
+  if (!company) throw notFound('Company not found');
+  const [owner, members] = await Promise.all([
+    User.findByPk(company.OwnerId),
+    DocCompanyMember.findAll({ where: { DocCompanyId: company.id }, include: [{ model: User, as: 'User' }], order: [['createdAt', 'ASC']] })
+  ]);
+  res.json({
+    data: {
+      owner: owner ? { id: owner.id, name: owner.Name, email: owner.Email } : null,
+      members: members.map((m) => ({ id: m.id, userId: m.UserId, role: m.Role, name: m.User?.Name || null, email: m.User?.Email || null, addedAt: m.createdAt }))
+    }
+  });
+});
+
+exports.addMember = asyncHandler(async (req, res) => {
+  const company = await withEmails(req.params.id, req.userId);
+  if (!company) throw notFound('Company not found');
+  const email = String(req.body.email || '').trim().toLowerCase();
+  const user = await User.findOne({ where: { Email: email } });
+  if (!user) throw badRequest('No DocSign account with that email yet. Ask them to sign up first, then add them.', 'no_user');
+  if (user.id === company.OwnerId) throw badRequest('That person already owns this workspace.', 'is_owner');
+  const [m, created] = await DocCompanyMember.findOrCreate({
+    where: { DocCompanyId: company.id, UserId: user.id },
+    defaults: { Role: req.body.role === 'admin' ? 'admin' : 'member', InvitedByUserId: req.userId }
+  });
+  res.status(created ? 201 : 200).json({ data: { id: m.id, userId: user.id, name: user.Name, email: user.Email, role: m.Role } });
+});
+
+exports.removeMember = asyncHandler(async (req, res) => {
+  const company = await withEmails(req.params.id, req.userId);
+  if (!company) throw notFound('Company not found');
+  const m = await DocCompanyMember.findOne({ where: { id: req.params.memberId, DocCompanyId: company.id } });
+  if (!m) throw notFound('Member not found');
+  await m.destroy();
+  res.json({ ok: true });
 });
 
 /**

@@ -14,7 +14,8 @@ const { APP_BASE_URL, signatureRequest, signatureRequestHtml, systemCanSendFrom,
 const oauth = require('../services/emailOAuth');
 const { decryptSecret } = require('../services/secretStore');
 const { asyncHandler, notFound, badRequest, forbidden } = require('../utils/http');
-const { resolveCompanyId, companyFilter } = require('../utils/companyScope');
+const { resolveCompanyId } = require('../utils/companyScope');
+const { listScope, canAccessRecord } = require('../utils/access');
 
 /**
  * For email delivery from a company address, resolve the CONNECTED mailbox to
@@ -138,7 +139,7 @@ const withGraph = (id, ownerId) =>
   });
 
 exports.list = asyncHandler(async (req, res) => {
-  const where = { CreatedBy: req.userId, ...companyFilter(req.query) };
+  const where = { ...(await listScope(req.userId, req.query, 'CreatedBy')) };
   if (req.query.projectId) where.DocProjectId = req.query.projectId;
   if (req.query.status) where.Status = req.query.status;
   const envelopes = await DocEnvelope.findAll({
@@ -163,16 +164,16 @@ exports.get = asyncHandler(async (req, res) => {
 exports.create = asyncHandler(async (req, res) => {
   const b = req.body;
 
-  const doc = await DocDocument.findOne({ where: { id: b.documentId, OwnerId: req.userId, ArchivedAt: null } });
-  if (!doc) throw badRequest('Document not found.', 'bad_document');
+  const doc = await DocDocument.findOne({ where: { id: b.documentId, ArchivedAt: null } });
+  if (!doc || !(await canAccessRecord(req.userId, doc))) throw badRequest('Document not found.', 'bad_document');
 
   let template = null;
   if (b.templateId) {
     template = await DocTemplate.findOne({
-      where: { id: b.templateId, OwnerId: req.userId },
+      where: { id: b.templateId },
       include: [{ model: DocSignatureField, as: 'Fields' }]
     });
-    if (!template) throw badRequest('Template not found.', 'bad_template');
+    if (!template || !(await canAccessRecord(req.userId, template))) throw badRequest('Template not found.', 'bad_template');
   }
 
   // Validate any referenced recipients belong to this owner.

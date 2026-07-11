@@ -75,6 +75,34 @@ function CompanyCard({ company, providers, onChanged }) {
     }
   };
 
+  // Team members (owner-managed).
+  const [members, setMembers] = useState(null);
+  const [memberEmail, setMemberEmail] = useState('');
+  const loadMembers = () => api.get(`/companies/${company.id}/members`).then((r) => setMembers(r.data.data)).catch(() => {});
+  useEffect(() => {
+    if (company.isOwner) loadMembers();
+  }, [company.id]);
+  const addMember = async (e) => {
+    e.preventDefault();
+    if (!memberEmail.trim()) return;
+    setBusy(true);
+    try {
+      await api.post(`/companies/${company.id}/members`, { email: memberEmail.trim().toLowerCase() });
+      setMemberEmail('');
+      await loadMembers();
+      toast('Member added — they now share this workspace.');
+    } catch (err) {
+      toast(apiError(err), 'err');
+    } finally {
+      setBusy(false);
+    }
+  };
+  const removeMember = async (mid) => {
+    if (!confirm('Remove this member from the workspace?')) return;
+    await api.delete(`/companies/${company.id}/members/${mid}`);
+    loadMembers();
+  };
+
   const pickPreset = (preset) => {
     const p = SMTP_PRESETS[preset];
     setSmtp((s) => ({ ...s, preset, host: p.host, port: p.port, secure: p.secure }));
@@ -178,6 +206,40 @@ function CompanyCard({ company, providers, onChanged }) {
           <button className="btn" disabled={busy}>Save</button>
         </div>
       </form>
+
+      {company.isOwner ? (
+        <div className="card mb" style={{ background: 'var(--panel, #fafafa)' }}>
+          <div className="field" style={{ marginBottom: 8 }}>
+            <span style={{ fontWeight: 600, fontSize: 13 }}>Team members</span>
+            <div className="muted" style={{ fontSize: 12 }}>People who share this workspace — its documents, templates, envelopes and recipients.</div>
+          </div>
+          <table className="mb">
+            <tbody>
+              <tr>
+                <td>{members?.owner?.email || '—'}{members?.owner?.name ? ` · ${members.owner.name}` : ''}</td>
+                <td><span className="badge blue">owner</span></td>
+                <td />
+              </tr>
+              {(members?.members || []).map((m) => (
+                <tr key={m.id}>
+                  <td>{m.email}{m.name ? ` · ${m.name}` : ''}</td>
+                  <td><span className="badge">{m.role}</span></td>
+                  <td style={{ textAlign: 'right' }}>
+                    <button className="btn sm danger" onClick={() => removeMember(m.id)}>Remove</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <form className="flex" style={{ gap: 8 }} onSubmit={addMember}>
+            <input className="input" type="email" value={memberEmail} onChange={(e) => setMemberEmail(e.target.value)} placeholder="teammate@email.com" style={{ maxWidth: 280 }} />
+            <button className="btn" disabled={busy}>Add member</button>
+          </form>
+          <p className="muted" style={{ fontSize: 12, marginTop: 6 }}>They need a DocSign account first. End-to-end-encrypted documents can’t be shared (only plaintext) — the uploader alone holds the key.</p>
+        </div>
+      ) : (
+        <div className="badge amber" style={{ marginBottom: 12 }}>Shared with you · managed by the owner</div>
+      )}
 
       <div className="field" style={{ marginBottom: 8 }}>
         <span style={{ fontWeight: 600, fontSize: 13 }}>Connected sending mailboxes</span>

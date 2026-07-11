@@ -22,6 +22,11 @@ router.get('/:id', validate(idParam, 'params'), controller.get);
 router.patch('/:id', validate(idParam, 'params'), validate(schemas.update), controller.update);
 router.delete('/:id', validate(idParam, 'params'), controller.remove);
 
+// Team members (shared workspace access) — owner-managed.
+router.get('/:id/members', validate(idParam, 'params'), controller.listMembers);
+router.post('/:id/members', validate(idParam, 'params'), controller.addMember);
+router.delete('/:id/members/:memberId', validate(idParam, 'params'), controller.removeMember);
+
 router.post('/:id/logo', validate(idParam, 'params'), logoUpload.single('logo'), controller.uploadLogo);
 router.post('/:id/emails', validate(idParam, 'params'), validate(schemas.addEmail), controller.addEmail);
 router.delete('/:id/emails/:emailId', validate(idParam, 'params'), controller.removeEmail);

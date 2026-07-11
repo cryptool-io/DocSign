@@ -3,11 +3,12 @@ const storage = require('../services/docroom/storage');
 const pdf = require('../services/docroom/pdf');
 const { asyncHandler, notFound, badRequest } = require('../utils/http');
 const { paginate, meta } = require('../utils/misc');
-const { resolveCompanyId, companyFilter } = require('../utils/companyScope');
+const { resolveCompanyId } = require('../utils/companyScope');
+const { listScope, canAccessRecord } = require('../utils/access');
 
 exports.list = asyncHandler(async (req, res) => {
   const { limit, offset, page, pageSize } = paginate(req.query);
-  const where = { OwnerId: req.userId, ArchivedAt: null, ...companyFilter(req.query) };
+  const where = { ...(await listScope(req.userId, req.query)), ArchivedAt: null };
   if (req.query.projectId) where.DocProjectId = req.query.projectId;
 
   const { rows, count } = await DocDocument.findAndCountAll({
@@ -79,9 +80,10 @@ exports.upload = asyncHandler(async (req, res) => {
   res.status(201).json({ data: doc });
 });
 
+// Owner OR a member of the document's workspace may open/manage it.
 const findOwned = async (req) => {
-  const doc = await DocDocument.findOne({ where: { id: req.params.id, OwnerId: req.userId } });
-  if (!doc) throw notFound('Document not found');
+  const doc = await DocDocument.findOne({ where: { id: req.params.id } });
+  if (!doc || !(await canAccessRecord(req.userId, doc))) throw notFound('Document not found');
   return doc;
 };
 

@@ -11,6 +11,7 @@ module.exports = (sequelize, DataTypes) => {
       DocCompany.hasMany(models.DocDocument, { foreignKey: 'DocCompanyId', as: 'Documents' });
       DocCompany.hasMany(models.DocEnvelope, { foreignKey: 'DocCompanyId', as: 'Envelopes' });
       DocCompany.hasMany(models.DocDataRoom, { foreignKey: 'DocCompanyId', as: 'DataRooms' });
+      DocCompany.hasMany(models.DocCompanyMember, { foreignKey: 'DocCompanyId', as: 'Members' });
     }
   }
 

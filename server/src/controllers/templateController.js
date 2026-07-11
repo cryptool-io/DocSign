@@ -1,6 +1,7 @@
 const { DocTemplate, DocSignatureField, DocDocument, sequelize } = require('../models');
 const { asyncHandler, notFound, badRequest } = require('../utils/http');
-const { resolveCompanyId, companyFilter } = require('../utils/companyScope');
+const { resolveCompanyId } = require('../utils/companyScope');
+const { listScope, canAccessRecord } = require('../utils/access');
 
 const serialize = (tpl) => ({
   ...tpl.toJSON(),
@@ -19,14 +20,15 @@ const serialize = (tpl) => ({
   }))
 });
 
-const withFields = (id, ownerId) =>
-  DocTemplate.findOne({
-    where: { id, OwnerId: ownerId },
-    include: [{ model: DocSignatureField, as: 'Fields' }]
-  });
+// Owner OR a member of the template's workspace.
+const withFields = async (id, userId) => {
+  const tpl = await DocTemplate.findOne({ where: { id }, include: [{ model: DocSignatureField, as: 'Fields' }] });
+  if (!tpl || !(await canAccessRecord(userId, tpl))) return null;
+  return tpl;
+};
 
 exports.list = asyncHandler(async (req, res) => {
-  const where = { OwnerId: req.userId, ArchivedAt: null, ...companyFilter(req.query) };
+  const where = { ...(await listScope(req.userId, req.query)), ArchivedAt: null };
   if (req.query.projectId) where.DocProjectId = req.query.projectId;
   const templates = await DocTemplate.findAll({ where, order: [['updatedAt', 'DESC']] });
   res.json({ data: templates });
@@ -60,8 +62,8 @@ const fieldRows = (templateId, fields) =>
 exports.create = asyncHandler(async (req, res) => {
   const body = req.body;
   if (body.sourceDocumentId) {
-    const doc = await DocDocument.findOne({ where: { id: body.sourceDocumentId, OwnerId: req.userId } });
-    if (!doc) throw badRequest('Source document not found.', 'bad_document');
+    const doc = await DocDocument.findOne({ where: { id: body.sourceDocumentId } });
+    if (!doc || !(await canAccessRecord(req.userId, doc))) throw badRequest('Source document not found.', 'bad_document');
   }
 
   const tpl = await sequelize.transaction(async (t) => {
@@ -89,8 +91,8 @@ exports.create = asyncHandler(async (req, res) => {
 });
 
 exports.update = asyncHandler(async (req, res) => {
-  const tpl = await DocTemplate.findOne({ where: { id: req.params.id, OwnerId: req.userId } });
-  if (!tpl) throw notFound('Template not found');
+  const tpl = await DocTemplate.findOne({ where: { id: req.params.id } });
+  if (!tpl || !(await canAccessRecord(req.userId, tpl))) throw notFound('Template not found');
   const body = req.body;
 
   await sequelize.transaction(async (t) => {
@@ -116,8 +118,8 @@ exports.update = asyncHandler(async (req, res) => {
 });
 
 exports.remove = asyncHandler(async (req, res) => {
-  const tpl = await DocTemplate.findOne({ where: { id: req.params.id, OwnerId: req.userId } });
-  if (!tpl) throw notFound('Template not found');
+  const tpl = await DocTemplate.findOne({ where: { id: req.params.id } });
+  if (!tpl || !(await canAccessRecord(req.userId, tpl))) throw notFound('Template not found');
   await tpl.update({ ArchivedAt: new Date() });
   res.json({ ok: true });
 });

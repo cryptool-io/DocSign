@@ -64,13 +64,16 @@ exports.callback = asyncHandler(async (req, res) => {
   if (!tokens.email) return back('error_no_email');
   if (!tokens.refreshToken) return back('error_no_refresh'); // e.g. consent without offline access
 
-  // Upsert the connected address for this company.
+  // Attach the connection to the workspace's SENDING address. Priority:
+  //  1) a linked address equal to the signed-in account (you connected that
+  //     exact mailbox), else
+  //  2) the workspace's default from-address — so you can sign in as
+  //     micky@mickai.co.uk but send from hello@mickai.co.uk (the workspace
+  //     address). That requires hello@ to be a verified "Send mail as" alias in
+  //     the signed-in Google/Microsoft account; otherwise the provider rewrites
+  //     the From back to the account address.
+  //  3) else create a row for the signed-in account email.
   await sequelize.transaction(async (t) => {
-    const existing = await DocCompanyEmail.findOne({
-      where: { DocCompanyId: company.id, Email: tokens.email },
-      transaction: t
-    });
-    const hasDefault = await DocCompanyEmail.count({ where: { DocCompanyId: company.id, IsDefault: true }, transaction: t });
     const values = {
       Provider: provider,
       OAuthRefreshTokenEnc: encryptSecret(tokens.refreshToken),
@@ -78,9 +81,12 @@ exports.callback = asyncHandler(async (req, res) => {
       OAuthScope: tokens.scope,
       VerifiedAt: new Date()
     };
-    if (existing) {
-      await existing.update(values, { transaction: t });
+    let target = await DocCompanyEmail.findOne({ where: { DocCompanyId: company.id, Email: tokens.email }, transaction: t });
+    if (!target) target = await DocCompanyEmail.findOne({ where: { DocCompanyId: company.id, IsDefault: true }, transaction: t });
+    if (target) {
+      await target.update(values, { transaction: t });
     } else {
+      const hasDefault = await DocCompanyEmail.count({ where: { DocCompanyId: company.id, IsDefault: true }, transaction: t });
       await DocCompanyEmail.create(
         { DocCompanyId: company.id, Email: tokens.email, IsDefault: hasDefault === 0, ...values },
         { transaction: t }

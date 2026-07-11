@@ -28,7 +28,6 @@ export default function SendEnvelope() {
   const user = useAuth((s) => s.user);
   const [documentId, setDocumentId] = useState(loc.state?.documentId || '');
   const [templateId, setTemplateId] = useState('');
-  const [tplTouched, setTplTouched] = useState(false); // did the user pick a template themselves?
   const [companyId, setCompanyId] = useState(activeId || '');
   const [fromEmail, setFromEmail] = useState('');
   const [deliveryMode, setDeliveryMode] = useState('email');
@@ -62,17 +61,20 @@ export default function SendEnvelope() {
     })();
   }, []);
 
-  // Auto-select the workspace's default template until the user picks one. This
-  // is the "show default template" behavior — its field layout loads on open.
-  const defaultTemplate = templates.find(
-    (x) => x.IsDefault && (companyId ? x.DocCompanyId === companyId : !x.DocCompanyId)
-  );
+  // Apply the chosen DOCUMENT's own signing setup: its default saved setup (or the
+  // only one). Signing setups are configured on the Documents page, so there's no
+  // separate picker here — pick a document and its fields/roles load automatically.
   useEffect(() => {
-    if (tplTouched) return;
-    setTemplateId(defaultTemplate ? defaultTemplate.id : '');
-  }, [templates, companyId]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (!documentId) {
+      setTemplateId('');
+      return;
+    }
+    const forDoc = templates.filter((t) => t.SourceDocumentId === documentId);
+    const setup = forDoc.find((t) => t.IsDefault) || forDoc[0] || null;
+    setTemplateId(setup ? setup.id : '');
+  }, [documentId, templates]);
 
-  // When a template is chosen, prefill its signer roles as blank signer rows.
+  // When a setup is applied, prefill its signer roles as blank signer rows.
   useEffect(() => {
     if (!templateId) return;
     const tpl = templates.find((t) => t.id === templateId);
@@ -466,22 +468,19 @@ export default function SendEnvelope() {
             </select>
           </div>
           <div className="field">
-            <label>Saved signing setup (optional)</label>
-            <select
-              className="select"
-              value={templateId}
-              onChange={(e) => {
-                setTplTouched(true);
-                setTemplateId(e.target.value);
-              }}
-            >
-              <option value="">No template</option>
-              {templates.map((t) => (
-                <option key={t.id} value={t.id}>
-                  {t.Name}{t.IsDefault ? ' (default)' : ''}
-                </option>
-              ))}
-            </select>
+            <label>Signing fields</label>
+            <div className="input" style={{ display: 'flex', alignItems: 'center', minHeight: 40, background: 'var(--panel, #fafafa)' }}>
+              {!documentId ? (
+                <span className="muted">Choose a document first</span>
+              ) : templateId ? (
+                <span>✓ Using this document’s saved signing setup</span>
+              ) : (
+                <span className="muted">
+                  No setup on this document — place fields below, or set one up under{' '}
+                  <a href="#" onClick={(e) => { e.preventDefault(); nav('/documents'); }}>Documents</a>.
+                </span>
+              )}
+            </div>
           </div>
         </div>
       </div>

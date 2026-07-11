@@ -271,6 +271,35 @@ exports.create = asyncHandler(async (req, res) => {
     return envelope;
   });
 
+  // Auto-fill the address book: remember each signer as a saved recipient so they
+  // show up in the "From saved recipient" picker (and favorites) next time.
+  // Best-effort — never block sending on this.
+  try {
+    for (const s of b.signers) {
+      if (!s.email) continue;
+      const email = String(s.email).trim().toLowerCase();
+      const [rec, created] = await DocRecipient.findOrCreate({
+        where: { OwnerId: req.userId, Email: email, ArchivedAt: null },
+        defaults: {
+          OwnerId: req.userId,
+          Name: s.name || email,
+          Email: email,
+          Title: s.signerRole || null,
+          DocCompanyId: companyId || null
+        }
+      });
+      // Touch existing entries (changed:true forces updatedAt) so "recently used"
+      // ordering surfaces them.
+      if (!created) {
+        rec.Name = s.name || rec.Name;
+        rec.changed('updatedAt', true);
+        await rec.save();
+      }
+    }
+  } catch {
+    /* address book is best-effort */
+  }
+
   res.status(201).json({ data: serialize(await withGraph(env.id, req.userId)) });
 });
 

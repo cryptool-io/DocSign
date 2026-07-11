@@ -10,7 +10,12 @@ exports.list = asyncHandler(async (req, res) => {
 
   const { rows, count } = await DocRecipient.findAndCountAll({
     where,
-    order: [['Name', 'ASC']],
+    // Favorites float to the top, then most-recently-used (updatedAt), then name.
+    order: [
+      ['Favorite', 'DESC'],
+      ['updatedAt', 'DESC'],
+      ['Name', 'ASC']
+    ],
     limit,
     offset
   });
@@ -44,13 +49,14 @@ const findOwned = async (req) => {
 
 exports.update = asyncHandler(async (req, res) => {
   const recipient = await findOwned(req);
-  const { name, email, company, title, projectId } = req.body;
+  const { name, email, company, title, projectId, favorite } = req.body;
   await recipient.update({
     Name: name ?? recipient.Name,
     Email: email ?? recipient.Email,
     Company: company === undefined ? recipient.Company : company,
     Title: title === undefined ? recipient.Title : title,
-    DocProjectId: projectId === undefined ? recipient.DocProjectId : projectId
+    DocProjectId: projectId === undefined ? recipient.DocProjectId : projectId,
+    Favorite: favorite === undefined ? recipient.Favorite : favorite
   });
   res.json({ data: recipient });
 });

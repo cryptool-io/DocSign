@@ -31,7 +31,8 @@ const recipient = {
     email: Joi.string().email().max(254).lowercase().trim(),
     company: Joi.string().max(160).allow('', null),
     title: Joi.string().max(160).allow('', null),
-    projectId: uuid.allow(null)
+    projectId: uuid.allow(null),
+    favorite: Joi.boolean()
   }).min(1)
 };
 

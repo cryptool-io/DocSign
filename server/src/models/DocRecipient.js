@@ -34,6 +34,7 @@ module.exports = (sequelize, DataTypes) => {
       },
       Company: { type: DataTypes.STRING, allowNull: true },
       Title: { type: DataTypes.STRING, allowNull: true },
+      Favorite: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
       ArchivedAt: { type: DataTypes.DATE, allowNull: true }
     },
     { sequelize, modelName: 'DocRecipient', tableName: 'DocRecipients', timestamps: true }

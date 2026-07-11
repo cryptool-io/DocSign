@@ -35,6 +35,15 @@ export default function Recipients() {
     load();
   };
 
+  const toggleFav = async (r) => {
+    try {
+      await api.patch(`/recipients/${r.id}`, { favorite: !r.Favorite });
+      load();
+    } catch (err) {
+      toast(apiError(err), 'err');
+    }
+  };
+
   if (!items) return <Spinner center />;
 
   return (
@@ -80,6 +89,7 @@ export default function Recipients() {
           <table>
             <thead>
               <tr>
+                <th style={{ width: 36 }} />
                 <th>Name</th>
                 <th>Email</th>
                 <th>Company</th>
@@ -89,6 +99,16 @@ export default function Recipients() {
             <tbody>
               {items.map((r) => (
                 <tr key={r.id}>
+                  <td style={{ textAlign: 'center' }}>
+                    <button
+                      className="btn sm"
+                      title={r.Favorite ? 'Unfavorite' : 'Mark as favorite'}
+                      onClick={() => toggleFav(r)}
+                      style={{ padding: '2px 6px', border: 'none', background: 'none', fontSize: 18, color: r.Favorite ? '#f59e0b' : '#bbb', cursor: 'pointer' }}
+                    >
+                      {r.Favorite ? '★' : '☆'}
+                    </button>
+                  </td>
                   <td>
                     <strong>{r.Name}</strong>
                     <div className="muted">{r.Title}</div>

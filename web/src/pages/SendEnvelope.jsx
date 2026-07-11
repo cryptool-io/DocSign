@@ -327,7 +327,7 @@ export default function SendEnvelope() {
                   <option value="">Manual…</option>
                   {recipients.map((r) => (
                     <option key={r.id} value={r.id}>
-                      {r.Name} · {r.Email}
+                      {r.Favorite ? '★ ' : ''}{r.Name} · {r.Email}
                     </option>
                   ))}
                 </select>

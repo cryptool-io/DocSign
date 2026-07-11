@@ -11,14 +11,20 @@ export const FIELD_TYPES = [
   { type: 'checkbox', label: 'Checkbox' }
 ];
 
-// Default field size as a fraction of page dimensions.
+// Default field size as a fraction of page dimensions. Text/date boxes are sized
+// to their text height (not oversized) — see heightForFont.
 const DEFAULT_SIZE = {
-  signature: [0.24, 0.06],
-  initials: [0.1, 0.05],
-  date: [0.16, 0.04],
-  text: [0.22, 0.04],
-  checkbox: [0.035, 0.028]
+  signature: [0.24, 0.05],
+  initials: [0.1, 0.04],
+  date: [0.16, 0.022],
+  text: [0.22, 0.022],
+  checkbox: [0.035, 0.022]
 };
+
+export const FONTS = ['Helvetica', 'Times', 'Courier'];
+const TEXTY = (t) => t === 'text' || t === 'date';
+// Box height (page fraction) that fits `fs`pt text on a ~letter page.
+const heightForFont = (fs) => Math.min(0.15, Math.max(0.014, (fs * 1.55) / 792));
 
 // Distinct colors per signer so it's obvious who signs where.
 export const SIGNER_COLORS = ['#2563eb', '#d97706', '#16a34a', '#9333ea', '#dc2626', '#0891b2'];
@@ -128,15 +134,26 @@ export default function FieldPlacer({ documentId, doc, fields, setFields, active
 
   const addField = (partial) => {
     const _id = Math.random().toString(36).slice(2);
+    const texty = TEXTY(activeType);
     setFields((cur) => [
       ...cur,
-      { _id, type: activeType, signerEmail: activeSignerEmail || null, required: true, autoFill: activeType === 'date', label: '', ...partial }
+      {
+        _id,
+        type: activeType,
+        signerEmail: activeSignerEmail || null,
+        required: true,
+        autoFill: activeType === 'date',
+        label: '',
+        ...(texty ? { fontSize: 11, font: 'Helvetica' } : {}),
+        ...partial
+      }
     ]);
     setSelectedId(_id); // select the new field so its options show immediately
     if (setActiveType) setActiveType(null); // leave "place" mode so the next click selects/moves, not adds
   };
   const moveField = (id, pos) => setFields((cur) => cur.map((f) => (f._id === id ? { ...f, ...pos } : f)));
   const patchField = (id, patch) => setFields((cur) => cur.map((f) => (f._id === id ? { ...f, ...patch } : f)));
+  const setFieldFontSize = (id, fs) => patchField(id, { fontSize: fs, height: heightForFont(fs) });
   const removeField = (id) => setFields((cur) => cur.filter((f) => f._id !== id));
 
   if (err) return <div className="empty">{err}</div>;
@@ -181,6 +198,29 @@ export default function FieldPlacer({ documentId, doc, fields, setFields, active
                 <div className="field" style={{ marginBottom: 0 }}>
                   <label>What is this box for?</label>
                   <input className="input" value={selected.label || ''} onChange={(e) => patchField(selected._id, { label: e.target.value })} placeholder="e.g. Full name, Address" />
+                </div>
+              )}
+              {TEXTY(selected.type) && (
+                <div className="flex" style={{ gap: 8 }}>
+                  <div className="field" style={{ marginBottom: 0, maxWidth: 92 }}>
+                    <label>Size (pt)</label>
+                    <input
+                      type="number"
+                      className="input"
+                      min={6}
+                      max={72}
+                      value={selected.fontSize || 11}
+                      onChange={(e) => setFieldFontSize(selected._id, Math.max(6, Math.min(72, Number(e.target.value) || 11)))}
+                    />
+                  </div>
+                  <div className="field" style={{ marginBottom: 0, flex: 1 }}>
+                    <label>Font</label>
+                    <select className="select" value={selected.font || 'Helvetica'} onChange={(e) => patchField(selected._id, { font: e.target.value })}>
+                      {FONTS.map((f) => (
+                        <option key={f} value={f}>{f}</option>
+                      ))}
+                    </select>
+                  </div>
                 </div>
               )}
               {selected.type === 'date' && (

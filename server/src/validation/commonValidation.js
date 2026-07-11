@@ -74,6 +74,8 @@ const field = Joi.object({
   height: Joi.number().min(0.001).max(1).required(),
   required: Joi.boolean().default(true),
   autoFill: Joi.boolean().default(false),
+  fontSize: Joi.number().integer().min(6).max(72).allow(null),
+  font: Joi.string().valid('Helvetica', 'Times', 'Courier').allow('', null),
   label: Joi.string().max(160).allow('', null)
 });
 

@@ -31,6 +31,9 @@ module.exports = (sequelize, DataTypes) => {
       Required: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
       // Date fields: auto-fill with the signing date (locked) vs manual entry.
       AutoFill: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
+      // Text style for stamped text/date fields.
+      FontSize: { type: DataTypes.INTEGER, allowNull: true },
+      Font: { type: DataTypes.STRING, allowNull: true },
       Label: { type: DataTypes.STRING, allowNull: true },
       Value: { type: DataTypes.TEXT, allowNull: true }
     },

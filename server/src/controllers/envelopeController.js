@@ -228,6 +228,8 @@ exports.create = asyncHandler(async (req, res) => {
       height: f.Height,
       required: f.Required,
       autoFill: f.AutoFill,
+      fontSize: f.FontSize,
+      font: f.Font,
       label: f.Label
     }));
 
@@ -295,6 +297,8 @@ exports.create = asyncHandler(async (req, res) => {
         Height: f.height,
         Required: f.required !== false,
         AutoFill: f.autoFill === true,
+        FontSize: f.fontSize || null,
+        Font: f.font || null,
         Label: f.label || null
       });
     }

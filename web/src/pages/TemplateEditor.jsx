@@ -13,10 +13,15 @@ const FIELD_TYPES = [
   { type: 'text', label: 'Text' },
   { type: 'checkbox', label: 'Checkbox' }
 ];
-const DEFAULT_SIZE = { signature: [0.22, 0.06], initials: [0.1, 0.05], date: [0.16, 0.04], text: [0.2, 0.04], checkbox: [0.04, 0.03] };
+const DEFAULT_SIZE = { signature: [0.22, 0.05], initials: [0.1, 0.04], date: [0.14, 0.022], text: [0.2, 0.022], checkbox: [0.03, 0.022] };
 // Distinct colors per signer so it's obvious who signs where.
 const SIGNER_COLORS = ['#2563eb', '#d97706', '#16a34a', '#9333ea', '#dc2626', '#0891b2'];
 const uid = () => Math.random().toString(36).slice(2, 9);
+const FONTS = ['Helvetica', 'Times', 'Courier'];
+const TEXTY = (t) => t === 'text' || t === 'date';
+// Box height (as a page fraction) that fits `fs` point text on a ~letter page,
+// so the placed box matches the size of the text that will be stamped in it.
+const heightForFont = (fs) => Math.min(0.15, Math.max(0.014, (fs * 1.55) / 792));
 
 function PageCanvas({ pageNumber, width, fields, activeType, colorFor, labelFor, onAdd, onMove, onRemove, onSelect, selectedId }) {
   const ref = useRef();
@@ -153,10 +158,24 @@ export default function TemplateEditor() {
   const addField = (f) => {
     if (!activeSigner) return toast('Add and select a signer first.', 'err');
     const _id = uid();
-    setFields((cur) => [...cur, { ...f, _id, signerRole: activeSigner, required: true, autoFill: f.type === 'date', label: '' }]);
+    const texty = TEXTY(f.type);
+    setFields((cur) => [
+      ...cur,
+      {
+        ...f,
+        _id,
+        signerRole: activeSigner,
+        required: true,
+        autoFill: f.type === 'date',
+        label: '',
+        ...(texty ? { fontSize: 11, font: 'Helvetica', height: heightForFont(11) } : {})
+      }
+    ]);
     setSelectedId(_id);
     setActiveType(null);
   };
+  // Changing the text size also resizes the box so it matches the stamped text.
+  const setFieldFontSize = (fid, fs) => patchField(fid, { fontSize: fs, height: heightForFont(fs) });
   const moveField = (fid, pos) => setFields((cur) => cur.map((f) => (f._id === fid ? { ...f, ...pos } : f)));
   const patchField = (fid, patch) => setFields((cur) => cur.map((f) => (f._id === fid ? { ...f, ...patch } : f)));
   const removeField = (fid) => setFields((cur) => cur.filter((f) => f._id !== fid));
@@ -184,6 +203,8 @@ export default function TemplateEditor() {
           height: f.height,
           required: f.required !== false,
           autoFill: f.type === 'date' ? f.autoFill === true : false,
+          fontSize: TEXTY(f.type) ? f.fontSize || 11 : null,
+          font: TEXTY(f.type) ? f.font || 'Helvetica' : null,
           label: f.label || null
         }))
       };
@@ -315,6 +336,29 @@ export default function TemplateEditor() {
                     <div className="field" style={{ marginBottom: 0 }}>
                       <label>What is this box for?</label>
                       <input className="input" value={selected.label || ''} onChange={(e) => patchField(selected._id, { label: e.target.value })} placeholder="e.g. Full name, Address, Company" />
+                    </div>
+                  )}
+                  {TEXTY(selected.type) && (
+                    <div className="flex" style={{ gap: 8 }}>
+                      <div className="field" style={{ marginBottom: 0, maxWidth: 100 }}>
+                        <label>Text size (pt)</label>
+                        <input
+                          type="number"
+                          className="input"
+                          min={6}
+                          max={72}
+                          value={selected.fontSize || 11}
+                          onChange={(e) => setFieldFontSize(selected._id, Math.max(6, Math.min(72, Number(e.target.value) || 11)))}
+                        />
+                      </div>
+                      <div className="field" style={{ marginBottom: 0, flex: 1 }}>
+                        <label>Font</label>
+                        <select className="select" value={selected.font || 'Helvetica'} onChange={(e) => patchField(selected._id, { font: e.target.value })}>
+                          {FONTS.map((f) => (
+                            <option key={f} value={f}>{f}</option>
+                          ))}
+                        </select>
+                      </div>
                     </div>
                   )}
                   {selected.type === 'date' && (

@@ -123,6 +123,8 @@ export default function SendEnvelope() {
             height: f.height,
             required: f.required !== false,
             autoFill: f.autoFill === true,
+            fontSize: f.fontSize || null,
+            font: f.font || null,
             label: f.label || ''
           }))
         );
@@ -278,6 +280,8 @@ export default function SendEnvelope() {
         height: f.height,
         required: f.required !== false,
         autoFill: f.type === 'date' ? f.autoFill === true : false,
+        fontSize: f.fontSize || null,
+        font: f.font || null,
         label: f.label || null
       }));
 
@@ -357,6 +361,8 @@ export default function SendEnvelope() {
         height: f.height,
         required: f.required !== false,
         autoFill: f.type === 'date' ? f.autoFill === true : false,
+        fontSize: f.fontSize || null,
+        font: f.font || null,
         label: f.label || null
       }));
     setSending(true);
@@ -401,6 +407,8 @@ export default function SendEnvelope() {
         height: f.height,
         required: f.required !== false,
         autoFill: f.type === 'date' ? f.autoFill === true : false,
+        fontSize: f.fontSize || null,
+        font: f.font || null,
         label: f.label || null
       }));
       const { data } = await api.post('/envelopes', {

@@ -34,6 +34,8 @@ const serialize = (tpl) => ({
     height: f.Height,
     required: f.Required,
     autoFill: f.AutoFill,
+    fontSize: f.FontSize,
+    font: f.Font,
     label: f.Label
   }))
 });
@@ -74,6 +76,8 @@ const fieldRows = (templateId, fields) =>
     Height: f.height,
     Required: f.required !== false,
     AutoFill: f.autoFill === true,
+    FontSize: f.fontSize || null,
+    Font: f.font || null,
     Label: f.label || null
   }));
 

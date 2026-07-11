@@ -63,6 +63,17 @@ const stampFields = async (buffer, fields, { signatureImages = {} } = {}) => {
   const helv = await pdf.embedFont(StandardFonts.Helvetica);
   const pages = pdf.getPages();
 
+  // Embed each requested standard font once (Helvetica / Times / Courier).
+  const fontCache = { Helvetica: helv };
+  const getFont = async (name) => {
+    const key = name === 'Times' ? 'Times' : name === 'Courier' ? 'Courier' : 'Helvetica';
+    if (!fontCache[key]) {
+      const std = key === 'Times' ? StandardFonts.TimesRoman : key === 'Courier' ? StandardFonts.Courier : StandardFonts.Helvetica;
+      fontCache[key] = await pdf.embedFont(std);
+    }
+    return fontCache[key];
+  };
+
   for (const field of fields) {
     const page = pages[field.PageNumber - 1];
     if (!page) continue;
@@ -84,12 +95,16 @@ const stampFields = async (buffer, fields, { signatureImages = {} } = {}) => {
     } else {
       const value = String(field.Value ?? '');
       if (!value) continue;
-      const fontSize = Math.max(8, Math.min(h * 0.7, 14));
+      const font = await getFont(field.Font);
+      // Use the field's chosen point size; fall back to fitting the box height.
+      const fontSize = field.FontSize
+        ? Math.max(6, Math.min(field.FontSize, 72))
+        : Math.max(8, Math.min(h * 0.7, 14));
       page.drawText(value, {
         x: x + 2,
-        y: y + Math.max(2, (h - fontSize) / 2),
+        y: y + Math.max(1, (h - fontSize) / 2),
         size: fontSize,
-        font: helv,
+        font,
         color: rgb(0.05, 0.05, 0.2)
       });
     }

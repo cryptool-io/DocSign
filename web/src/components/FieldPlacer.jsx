@@ -133,6 +133,36 @@ export default function FieldPlacer({ documentId, doc, fields, setFields, active
     return () => { dead = true; };
   }, [documentId]);
 
+  // Nudge the selected field with the arrow keys (~1px; Shift = ~10px), for
+  // pixel-precise positioning without dragging.
+  useEffect(() => {
+    const onKey = (e) => {
+      if (!selectedId) return;
+      const tag = (document.activeElement?.tagName || '').toLowerCase();
+      if (tag === 'input' || tag === 'select' || tag === 'textarea') return;
+      const dirs = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+      const d = dirs[e.key];
+      if (!d) return;
+      e.preventDefault();
+      const mult = e.shiftKey ? 10 : 1;
+      const stepX = mult / PAGE_WIDTH;
+      const stepY = mult / (PAGE_WIDTH * 1.294); // ~letter aspect
+      setFields((cur) =>
+        cur.map((f) =>
+          f._id === selectedId
+            ? {
+                ...f,
+                x: Math.max(0, Math.min(f.x + d[0] * stepX, 1 - f.width)),
+                y: Math.max(0, Math.min(f.y + d[1] * stepY, 1 - f.height))
+              }
+            : f
+        )
+      );
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [selectedId, setFields]);
+
   const addField = (partial) => {
     const _id = Math.random().toString(36).slice(2);
     const texty = TEXTY(activeType);
@@ -232,6 +262,7 @@ export default function FieldPlacer({ documentId, doc, fields, setFields, active
                   Auto-fill with the signing date
                 </label>
               )}
+              <div className="muted" style={{ fontSize: 12 }}>Tip: arrow keys nudge it 1px (Shift = 10px).</div>
               <button className="btn sm danger" onClick={() => { removeField(selected._id); setSelectedId(null); }}>Remove field</button>
             </div>
           ) : (

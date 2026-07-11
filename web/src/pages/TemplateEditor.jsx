@@ -130,6 +130,35 @@ export default function TemplateEditor() {
     if (signers.length && !signers.some((s) => s.key === activeSigner)) setActiveSigner(signers[0].key);
   }, [signers]);
 
+  // Nudge the selected field with the arrow keys (~1px; Shift = ~10px).
+  useEffect(() => {
+    const onKey = (e) => {
+      if (!selectedId) return;
+      const tag = (document.activeElement?.tagName || '').toLowerCase();
+      if (tag === 'input' || tag === 'select' || tag === 'textarea') return;
+      const dirs = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+      const d = dirs[e.key];
+      if (!d) return;
+      e.preventDefault();
+      const mult = e.shiftKey ? 10 : 1;
+      const stepX = mult / 640; // PageCanvas render width
+      const stepY = mult / (640 * 1.294);
+      setFields((cur) =>
+        cur.map((f) =>
+          f._id === selectedId
+            ? {
+                ...f,
+                x: Math.max(0, Math.min(f.x + d[0] * stepX, 1 - f.width)),
+                y: Math.max(0, Math.min(f.y + d[1] * stepY, 1 - f.height))
+              }
+            : f
+        )
+      );
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [selectedId]);
+
   useEffect(() => {
     if (!documentId) return setPdfData(null);
     let revoked = false;
@@ -374,6 +403,7 @@ export default function TemplateEditor() {
                     <input type="checkbox" checked={selected.required !== false} onChange={(e) => patchField(selected._id, { required: e.target.checked })} />
                     Required
                   </label>
+                  <div className="muted" style={{ fontSize: 12 }}>Tip: arrow keys nudge it 1px (Shift = 10px).</div>
                   <button className="btn sm danger" onClick={() => { removeField(selected._id); setSelectedId(null); }}>Remove field</button>
                 </div>
               ) : (

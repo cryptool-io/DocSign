@@ -22,11 +22,18 @@ const PROVIDERS = {
     clientSecret: () => process.env.GOOGLE_CLIENT_SECRET,
     authUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
     tokenUrl: 'https://oauth2.googleapis.com/token',
-    // gmail.send to send; openid+email to learn which address; settings.sharing to
-    // auto-register the workspace's from-address as a custom "send mail as" alias so
-    // you can sign in as micky@ and send from hello@. Creating a *custom* from-alias
-    // (a different address) requires settings.sharing — settings.basic is not enough.
-    scope: 'openid email https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/gmail.settings.sharing',
+    // gmail.send to send; openid+email to learn which address. Two settings scopes
+    // to auto-register the workspace's from-address as a custom "send mail as" alias
+    // (sign in as micky@, send from hello@): settings.basic is required to LIST the
+    // existing sendAs identities, and settings.sharing is required to CREATE a custom
+    // from-alias (a different address). Neither scope alone covers both calls.
+    scope: [
+      'openid',
+      'email',
+      'https://www.googleapis.com/auth/gmail.send',
+      'https://www.googleapis.com/auth/gmail.settings.basic',
+      'https://www.googleapis.com/auth/gmail.settings.sharing'
+    ].join(' '),
     authExtra: { access_type: 'offline', prompt: 'consent' }
   },
   microsoft: {
@@ -106,7 +113,8 @@ const exchangeCode = async (provider, code) => {
  * Register `sendAsEmail` as a "send mail as" address on the connected Google
  * account, so mail can go out FROM it (e.g. hello@ while signed in as micky@).
  * For an alias of the same account/domain this is auto-verified (no code). No-op
- * if already present. Needs the gmail.settings.sharing scope. Best-effort.
+ * if already present. Needs gmail.settings.basic (list) + .sharing (create).
+ * Best-effort.
  */
 const ensureGoogleSendAs = async (accessToken, sendAsEmail, displayName) => {
   const base = 'https://gmail.googleapis.com/gmail/v1/users/me/settings/sendAs';

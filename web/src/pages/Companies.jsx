@@ -15,6 +15,21 @@ function CompanyCard({ company, providers, onChanged }) {
   const [busy, setBusy] = useState(false);
   const [showSmtp, setShowSmtp] = useState(false);
   const [smtp, setSmtp] = useState({ preset: 'gmail', email: '', host: 'smtp.gmail.com', port: 465, secure: true, username: '', password: '' });
+  const [brand, setBrand] = useState({ senderName: company.senderName || '', logoUrl: company.logoUrl || '' });
+
+  const saveBrand = async (e) => {
+    e.preventDefault();
+    setBusy(true);
+    try {
+      await api.patch(`/companies/${company.id}`, { senderName: brand.senderName || null, logoUrl: brand.logoUrl || null });
+      toast('Branding saved — emails from this workspace will use it.');
+      onChanged();
+    } catch (err) {
+      toast(apiError(err), 'err');
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const pickPreset = (preset) => {
     const p = SMTP_PRESETS[preset];
@@ -88,6 +103,27 @@ function CompanyCard({ company, providers, onChanged }) {
           Archive
         </button>
       </div>
+
+      <form className="card mb" style={{ background: 'var(--panel, #fafafa)' }} onSubmit={saveBrand}>
+        <div className="field" style={{ marginBottom: 8 }}>
+          <span style={{ fontWeight: 600, fontSize: 13 }}>Email branding</span>
+          <div className="muted" style={{ fontSize: 12 }}>Shown in signature-request emails sent from this workspace.</div>
+        </div>
+        <div className="row" style={{ alignItems: 'flex-end' }}>
+          <div className="field" style={{ marginBottom: 0 }}>
+            <label>Sender name</label>
+            <input className="input" value={brand.senderName} onChange={(e) => setBrand((b) => ({ ...b, senderName: e.target.value }))} placeholder={company.name} />
+          </div>
+          <div className="field" style={{ marginBottom: 0, flex: 1.4 }}>
+            <label>Logo image URL</label>
+            <input className="input" value={brand.logoUrl} onChange={(e) => setBrand((b) => ({ ...b, logoUrl: e.target.value }))} placeholder="https://yoursite.com/logo.png" />
+          </div>
+          {brand.logoUrl && (
+            <img src={brand.logoUrl} alt="logo preview" style={{ maxHeight: 40, maxWidth: 120, objectFit: 'contain', border: '1px solid #eee', borderRadius: 4, padding: 2 }} />
+          )}
+          <button className="btn" disabled={busy}>Save</button>
+        </div>
+      </form>
 
       <div className="field" style={{ marginBottom: 8 }}>
         <span style={{ fontWeight: 600, fontSize: 13 }}>Connected sending mailboxes</span>

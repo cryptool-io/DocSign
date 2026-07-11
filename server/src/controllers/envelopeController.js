@@ -69,7 +69,7 @@ const signUrl = (token) => `${APP_BASE_URL}/sign/${token}`;
 // company's linked addresses.
 const resolveSenderIdentity = async (ownerId, companyId, fromEmail, fallbackUser) => {
   if (!companyId) {
-    return { fromName: fallbackUser.Name, fromEmail: fromEmail || null, replyTo: null };
+    return { fromName: fallbackUser.Name, fromEmail: fromEmail || null, replyTo: null, logoUrl: null };
   }
   const company = await DocCompany.findOne({
     where: { id: companyId, OwnerId: ownerId },
@@ -87,7 +87,8 @@ const resolveSenderIdentity = async (ownerId, companyId, fromEmail, fallbackUser
   return {
     fromName: company.SenderName || company.Name,
     fromEmail: chosen ? chosen.Email : company.SenderEmail || null,
-    replyTo: company.ReplyToEmail || null
+    replyTo: company.ReplyToEmail || null,
+    logoUrl: company.LogoUrl || null
   };
 };
 
@@ -387,7 +388,7 @@ exports.send = asyncHandler(async (req, res) => {
           const msg = {
             to: s.Email,
             subject: env.Subject || `${identity.fromName} requested your signature`,
-            html: signatureRequestHtml({ signerName: s.Name, senderName: identity.fromName, message: env.Message, signUrl: signUrl(s.AccessToken) }),
+            html: signatureRequestHtml({ signerName: s.Name, senderName: identity.fromName, message: env.Message, signUrl: signUrl(s.AccessToken), logoUrl: identity.logoUrl }),
             replyTo: identity.replyTo
           };
           // Send through the user's own connected mailbox: SMTP or OAuth.
@@ -402,7 +403,8 @@ exports.send = asyncHandler(async (req, res) => {
           replyTo: identity.replyTo,
           subject: env.Subject,
           message: env.Message,
-          signUrl: signUrl(s.AccessToken)
+          signUrl: signUrl(s.AccessToken),
+          logoUrl: identity.logoUrl
         });
       })
     );

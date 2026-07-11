@@ -40,9 +40,16 @@ const getTransporter = () => {
   return transporter;
 };
 
-const layout = (heading, bodyHtml, cta) => `
+// `brand` = { name, logoUrl } of the sending workspace. The header shows the
+// workspace's logo if it has one, else its name; falls back to the global brand.
+const layout = (heading, bodyHtml, cta, brand = {}) => {
+  const brandName = brand.name || FROM_NAME;
+  const header = brand.logoUrl
+    ? `<img src="${brand.logoUrl}" alt="${brandName}" style="max-height:44px;max-width:200px;display:block" />`
+    : `<span style="font-weight:700;font-size:18px">${brandName}</span>`;
+  return `
   <div style="font-family:-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif;max-width:560px;margin:0 auto;color:#111">
-    <div style="padding:20px 0;border-bottom:1px solid #eee;font-weight:700;font-size:18px">${FROM_NAME}</div>
+    <div style="padding:20px 0;border-bottom:1px solid #eee">${header}</div>
     <div style="padding:24px 0">
       <h1 style="font-size:20px;margin:0 0 12px">${heading}</h1>
       ${bodyHtml}
@@ -54,9 +61,10 @@ const layout = (heading, bodyHtml, cta) => `
       }
     </div>
     <div style="padding:16px 0;border-top:1px solid #eee;font-size:12px;color:#888">
-      Sent by ${FROM_NAME}. If you weren't expecting this, you can ignore it.
+      Sent by ${brandName}. If you weren't expecting this, you can ignore it.
     </div>
   </div>`;
+};
 
 const sendEmail = async ({ to, subject, html, text, fromName, fromEmail, replyTo }) => {
   // Per-send identity (company send-as) overrides the global default.
@@ -148,21 +156,23 @@ const linkViewedNotice = ({ to, docName, viewerEmail, when }) =>
   });
 
 // Shared HTML so the request can go via the global mailbox OR a connected one.
-const signatureRequestHtml = ({ signerName, senderName, message, signUrl }) =>
+// `logoUrl` brands the email with the sending workspace's logo.
+const signatureRequestHtml = ({ signerName, senderName, message, signUrl, logoUrl }) =>
   layout(
     `${senderName} requested your signature`,
     `<p>Hi ${signerName},</p>${message ? `<p>${message}</p>` : ''}<p>Please review and sign the document.</p>`,
-    { label: 'Review & sign', url: signUrl }
+    { label: 'Review & sign', url: signUrl },
+    { name: senderName, logoUrl }
   );
 
-const signatureRequest = ({ to, signerName, senderName, fromEmail, replyTo, subject, message, signUrl }) =>
+const signatureRequest = ({ to, signerName, senderName, fromEmail, replyTo, subject, message, signUrl, logoUrl }) =>
   sendEmail({
     to,
     fromName: senderName,
     fromEmail,
     replyTo,
     subject: subject || `${senderName} requested your signature`,
-    html: signatureRequestHtml({ signerName, senderName, message, signUrl })
+    html: signatureRequestHtml({ signerName, senderName, message, signUrl, logoUrl })
   });
 
 const signerOtp = ({ to, code }) =>

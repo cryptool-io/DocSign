@@ -39,7 +39,8 @@ app.use(
 );
 
 app.use(cookieParser());
-app.use(express.json({ limit: '2mb' }));
+// Keep the raw body so the GitHub webhook can verify its HMAC signature.
+app.use(express.json({ limit: '2mb', verify: (req, _res, buf) => { req.rawBody = buf; } }));
 app.use(express.urlencoded({ extended: true }));
 if (process.env.NODE_ENV !== 'test') app.use(morgan('dev'));
 
@@ -58,6 +59,9 @@ app.use('/api/envelopes', require('./routes/envelopeRoutes'));
 app.use('/api/data-rooms', require('./routes/dataRoomRoutes'));
 app.use('/api/analytics', require('./routes/analyticsRoutes'));
 app.use('/api/admin', require('./routes/adminRoutes'));
+
+// Auto-deploy: GitHub push webhook (HMAC-verified) → pull/build/restart.
+app.use('/api/hooks', require('./routes/hooksRoutes'));
 
 // OAuth redirect target for connecting sender mailboxes (Gmail/Outlook).
 app.use('/api/oauth', require('./routes/oauthRoutes'));

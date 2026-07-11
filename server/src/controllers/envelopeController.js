@@ -10,7 +10,7 @@ const {
 const { DocCompany, DocCompanyEmail } = require('../models');
 const { generateOpaqueToken } = require('../services/docroom/tokens');
 const { appendAuditEvent } = require('../services/docroom/hashChain');
-const { APP_BASE_URL, signatureRequest, signatureRequestHtml } = require('../services/email');
+const { APP_BASE_URL, signatureRequest, signatureRequestHtml, DRY_RUN } = require('../services/email');
 const oauth = require('../services/emailOAuth');
 const { decryptSecret } = require('../services/secretStore');
 const { asyncHandler, notFound, badRequest, forbidden } = require('../utils/http');
@@ -298,8 +298,20 @@ exports.send = asyncHandler(async (req, res) => {
   // Resolve (and gate on) the sending mailbox BEFORE marking the envelope sent,
   // so a "not connected" error leaves it as a draft the user can fix.
   const identity = isLink ? null : await resolveSenderIdentity(req.userId, env.DocCompanyId, env.FromEmail, req.user);
-  const connection = isLink ? null : await resolveSendingConnection(req.userId, env.DocCompanyId, env.FromEmail);
-  if (connection) connection.fromName = identity.fromName;
+  let connection = null;
+  if (!isLink) {
+    try {
+      connection = await resolveSendingConnection(req.userId, env.DocCompanyId, env.FromEmail);
+    } catch (err) {
+      // Not connected via OAuth. If a global mail transport (SES/SMTP) is
+      // configured, fall back to sending FROM the company address THROUGH the
+      // system mailbox (legitimate when the domain is verified with the provider).
+      // Only hard-fail when there's no transport at all (dry-run).
+      if (DRY_RUN) throw err;
+      connection = null;
+    }
+    if (connection) connection.fromName = identity.fromName;
+  }
 
   await sequelize.transaction(async (t) => {
     await env.update({ Status: 'sent', SentAt: new Date() }, { transaction: t });

@@ -40,7 +40,7 @@ const drawnImageForField = (signer, fieldType) => {
 const finalizeEnvelope = async (envelopeId, { documentKey = null } = {}) => {
   return sequelize.transaction(async (t) => {
     const env = await DocEnvelope.findByPk(envelopeId, { transaction: t, lock: t.LOCK.UPDATE });
-    if (!env || env.Status === 'completed') return env;
+    if (!env || env.Status === 'completed') return { env, pdfBuffer: null, encrypted: false, fileName: null };
 
     const [doc, signers, fields] = await Promise.all([
       DocDocument.findByPk(env.DocDocumentId, { transaction: t }),
@@ -138,7 +138,9 @@ const finalizeEnvelope = async (envelopeId, { documentKey = null } = {}) => {
       { transaction: t }
     );
 
-    return env;
+    // Return the PLAINTEXT signed PDF so the caller can attach it to the
+    // completion email (skipped for encrypted docs — never email plaintext).
+    return { env, pdfBuffer: buffer, encrypted: Boolean(doc.Encrypted), fileName: `${doc.Name}-signed.pdf` };
   });
 };
 

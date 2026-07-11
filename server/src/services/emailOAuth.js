@@ -146,20 +146,35 @@ const refreshAccessToken = async (provider, refreshToken) => {
 };
 
 // Build an RFC-822 message and base64url-encode it (Gmail API wants raw MIME).
-const buildRawMime = ({ fromName, fromEmail, to, subject, html, replyTo }) => {
-  const boundary = `b_${crypto.randomBytes(8).toString('hex')}`;
-  const headers = [
+// With attachments it becomes multipart/mixed (html part + each file part).
+const buildRawMime = ({ fromName, fromEmail, to, subject, html, replyTo, attachments }) => {
+  const b64url = (buf) => buf.toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  const baseHeaders = [
     `From: ${fromName ? `${fromName} <${fromEmail}>` : fromEmail}`,
     `To: ${to}`,
     replyTo ? `Reply-To: ${replyTo}` : null,
     `Subject: ${subject}`,
-    'MIME-Version: 1.0',
-    `Content-Type: text/html; charset="UTF-8"`
-  ]
-    .filter(Boolean)
-    .join('\r\n');
-  const mime = `${headers}\r\n\r\n${html}`;
-  return Buffer.from(mime).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+    'MIME-Version: 1.0'
+  ].filter(Boolean);
+
+  const files = (attachments || []).filter((a) => a && a.content);
+  if (files.length === 0) {
+    const mime = `${[...baseHeaders, 'Content-Type: text/html; charset="UTF-8"'].join('\r\n')}\r\n\r\n${html}`;
+    return b64url(Buffer.from(mime));
+  }
+
+  const boundary = `b_${crypto.randomBytes(8).toString('hex')}`;
+  let body = `${[...baseHeaders, `Content-Type: multipart/mixed; boundary="${boundary}"`].join('\r\n')}\r\n\r\n`;
+  body += `--${boundary}\r\nContent-Type: text/html; charset="UTF-8"\r\n\r\n${html}\r\n`;
+  for (const a of files) {
+    const b64 = Buffer.from(a.content).toString('base64').replace(/(.{76})/g, '$1\r\n');
+    body += `--${boundary}\r\n`;
+    body += `Content-Type: ${a.contentType || 'application/octet-stream'}; name="${a.filename}"\r\n`;
+    body += 'Content-Transfer-Encoding: base64\r\n';
+    body += `Content-Disposition: attachment; filename="${a.filename}"\r\n\r\n${b64}\r\n`;
+  }
+  body += `--${boundary}--`;
+  return b64url(Buffer.from(body));
 };
 
 const sendViaGoogle = async (accessToken, message) => {
@@ -174,12 +189,23 @@ const sendViaGoogle = async (accessToken, message) => {
 };
 
 const sendViaMicrosoft = async (accessToken, message) => {
+  const files = (message.attachments || []).filter((a) => a && a.content);
   const body = {
     message: {
       subject: message.subject,
       body: { contentType: 'HTML', content: message.html },
       toRecipients: [{ emailAddress: { address: message.to } }],
-      ...(message.replyTo ? { replyTo: [{ emailAddress: { address: message.replyTo } }] } : {})
+      ...(message.replyTo ? { replyTo: [{ emailAddress: { address: message.replyTo } }] } : {}),
+      ...(files.length
+        ? {
+            attachments: files.map((a) => ({
+              '@odata.type': '#microsoft.graph.fileAttachment',
+              name: a.filename,
+              contentType: a.contentType || 'application/octet-stream',
+              contentBytes: Buffer.from(a.content).toString('base64')
+            }))
+          }
+        : {})
     },
     saveToSentItems: true
   };

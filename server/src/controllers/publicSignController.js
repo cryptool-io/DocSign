@@ -17,7 +17,7 @@ const {
 const { verifyAccessToken } = require('../services/authTokens');
 const { appendAuditEvent } = require('../services/docroom/hashChain');
 const { finalizeEnvelope } = require('../services/docroom/completion');
-const { signerOtp, signerOtpHtml, sendEmail, sendViaSmtp, envelopeCompleted } = require('../services/email');
+const { signerOtpHtml, sendEmail, sendViaSmtp, envelopeCompletedHtml } = require('../services/email');
 const oauth = require('../services/emailOAuth');
 const { resolveSenderIdentity, resolveSendingConnection } = require('./envelopeController');
 const { asyncHandler, notFound, badRequest, forbidden, unauthorized, tooMany, clientIp } = require('../utils/http');
@@ -128,30 +128,45 @@ exports.start = asyncHandler(async (req, res) => {
  * mailbox it goes through that mailbox; otherwise (or on any failure) it falls
  * back to the system mailbox so the signer can always get their code.
  */
-const sendOtpBranded = async (env, signer, code) => {
-  const to = signer.Email;
+// Resolve the workspace sender identity + connected mailbox for an envelope
+// (both null for a personal envelope → system mailbox).
+const envelopeSender = async (env) => {
+  if (!env.DocCompanyId) return { identity: null, connection: null };
+  const identity = await resolveSenderIdentity(env.CreatedBy, env.DocCompanyId, env.FromEmail, { Name: 'DocSign' });
+  let connection = null;
   try {
-    if (env.DocCompanyId) {
-      const identity = await resolveSenderIdentity(env.CreatedBy, env.DocCompanyId, env.FromEmail, { Name: 'DocSign' });
-      let connection = null;
-      try {
-        connection = await resolveSendingConnection(env.CreatedBy, env.DocCompanyId, env.FromEmail);
-      } catch {
-        connection = null;
-      }
-      const subject = `Your signing verification code: ${code}`;
-      const html = signerOtpHtml(code, { name: identity.fromName, logoUrl: identity.logoUrl });
-      const msg = { to, subject, html, replyTo: identity.replyTo };
+    connection = await resolveSendingConnection(env.CreatedBy, env.DocCompanyId, env.FromEmail);
+  } catch {
+    connection = null;
+  }
+  return { identity, connection };
+};
+
+// Send one message via the envelope's workspace mailbox, falling back to the
+// system mailbox on any failure so delivery never gets stuck.
+const sendWithSender = async ({ identity, connection }, { to, subject, html, attachments }) => {
+  try {
+    if (identity) {
+      const msg = { to, subject, html, replyTo: identity.replyTo, attachments };
       if (connection && connection.kind === 'smtp') return await sendViaSmtp(connection, msg);
       if (connection && connection.kind === 'oauth') return await oauth.sendViaConnection(connection, msg);
-      // No connected mailbox → system mailbox, but keep the workspace From + brand.
       return await sendEmail({ ...msg, fromName: identity.fromName, fromEmail: identity.fromEmail });
     }
   } catch (e) {
-    console.warn(`[docsign] branded OTP failed, using system mailbox: ${e.message}`);
+    console.warn(`[docsign] workspace send failed, using system mailbox: ${e.message}`);
   }
-  // Personal envelope, or a failure above: plain system-mailbox code.
-  return signerOtp({ to, code });
+  return sendEmail({ to, subject, html, attachments });
+};
+
+const brandOf = (identity) => (identity ? { name: identity.fromName, logoUrl: identity.logoUrl } : undefined);
+
+const sendOtpBranded = async (env, signer, code) => {
+  const sender = await envelopeSender(env);
+  return sendWithSender(sender, {
+    to: signer.Email,
+    subject: `Your signing verification code: ${code}`,
+    html: signerOtpHtml(code, brandOf(sender.identity))
+  });
 };
 
 /** Public: send the signer a 6-digit OTP to prove mailbox control. */
@@ -415,16 +430,22 @@ exports.submit = asyncHandler(async (req, res) => {
 
   if (remaining.length === 0) {
     const finalized = await finalizeEnvelope(env.id, { documentKey: documentKey || null });
-    // Notify the sender + all signers that it's complete.
+    // Notify the sender + all signers that it's complete — with the signed PDF
+    // attached (plaintext docs only; encrypted docs are never emailed in the
+    // clear, so the sender downloads them in-app), from the workspace mailbox.
     const owner = await sequelize.models.User.findByPk(env.CreatedBy);
     const allSigners = await DocEnvelopeSigner.findAll({ where: { DocEnvelopeId: env.id } });
-    const recipients = [owner?.Email, ...allSigners.map((s) => s.Email)].filter(Boolean);
+    const recipients = [...new Set([owner?.Email, ...allSigners.map((s) => s.Email)].filter(Boolean))];
+    const sender = await envelopeSender(env);
+    const attachments =
+      finalized?.pdfBuffer && !finalized.encrypted
+        ? [{ filename: finalized.fileName || 'signed.pdf', content: finalized.pdfBuffer, contentType: 'application/pdf' }]
+        : undefined;
+    const html = envelopeCompletedHtml(Boolean(attachments), null, brandOf(sender.identity));
     await Promise.allSettled(
-      [...new Set(recipients)].map((to) =>
-        envelopeCompleted({ to, subject: `Completed: ${env.Subject}`, downloadUrl: null })
-      )
+      recipients.map((to) => sendWithSender(sender, { to, subject: `Completed: ${env.Subject}`, html, attachments }))
     );
-    return res.json({ data: { status: finalized?.Status || 'completed' } });
+    return res.json({ data: { status: finalized?.env?.Status || 'completed' } });
   }
 
   if (env.SigningOrder === 'sequential') {

@@ -66,7 +66,7 @@ const layout = (heading, bodyHtml, cta, brand = {}) => {
   </div>`;
 };
 
-const sendEmail = async ({ to, subject, html, text, fromName, fromEmail, replyTo }) => {
+const sendEmail = async ({ to, subject, html, text, fromName, fromEmail, replyTo, attachments }) => {
   // Per-send identity (company send-as) overrides the global default.
   const senderName = fromName || FROM_NAME;
   const senderEmail = fromEmail || FROM_EMAIL;
@@ -76,7 +76,8 @@ const sendEmail = async ({ to, subject, html, text, fromName, fromEmail, replyTo
     subject,
     html,
     text: text || html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim(),
-    ...(replyTo ? { replyTo } : {})
+    ...(replyTo ? { replyTo } : {}),
+    ...(attachments && attachments.length ? { attachments } : {})
   };
 
   if (DRY_RUN) {
@@ -109,7 +110,7 @@ const verifySmtp = async (config) => {
 };
 
 // Send a message THROUGH a client's own SMTP mailbox.
-const sendViaSmtp = async (config, { to, subject, html, text, replyTo }) => {
+const sendViaSmtp = async (config, { to, subject, html, text, replyTo, attachments }) => {
   const from = `${config.fromName || FROM_NAME} <${config.fromEmail || config.user}>`;
   return smtpTransport(config).sendMail({
     from,
@@ -117,7 +118,8 @@ const sendViaSmtp = async (config, { to, subject, html, text, replyTo }) => {
     subject,
     html,
     text: text || html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim(),
-    ...(replyTo ? { replyTo } : {})
+    ...(replyTo ? { replyTo } : {}),
+    ...(attachments && attachments.length ? { attachments } : {})
   });
 };
 
@@ -203,15 +205,25 @@ const signerOtp = ({ to, code, fromName, fromEmail, replyTo, logoUrl }) =>
     html: signerOtpHtml(code, fromName || logoUrl ? { name: fromName, logoUrl } : undefined)
   });
 
-const envelopeCompleted = ({ to, subject, downloadUrl }) =>
+const envelopeCompletedHtml = (hasAttachment, downloadUrl, brand) =>
+  layout(
+    'All parties have signed',
+    `<p>The document is fully executed${hasAttachment ? ', with the certificate of completion' : ''}. ${
+      hasAttachment ? 'The signed PDF is attached to this email.' : 'A copy with the certificate of completion is available below.'
+    }</p>`,
+    downloadUrl ? { label: 'Download signed copy', url: downloadUrl } : null,
+    brand
+  );
+
+const envelopeCompleted = ({ to, subject, downloadUrl, attachments, fromName, fromEmail, replyTo, logoUrl }) =>
   sendEmail({
     to,
+    fromName,
+    fromEmail,
+    replyTo,
     subject: subject || 'Document completed',
-    html: layout(
-      'All parties have signed',
-      '<p>The document is fully executed. A copy with the certificate of completion is available below.</p>',
-      downloadUrl ? { label: 'Download signed copy', url: downloadUrl } : null
-    )
+    html: envelopeCompletedHtml(Boolean(attachments && attachments.length), downloadUrl, fromName || logoUrl ? { name: fromName, logoUrl } : undefined),
+    attachments
   });
 
 module.exports = {
@@ -229,5 +241,6 @@ module.exports = {
   signatureRequestHtml,
   signerOtp,
   signerOtpHtml,
-  envelopeCompleted
+  envelopeCompleted,
+  envelopeCompletedHtml
 };

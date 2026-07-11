@@ -59,6 +59,9 @@ app.use('/api/data-rooms', require('./routes/dataRoomRoutes'));
 app.use('/api/analytics', require('./routes/analyticsRoutes'));
 app.use('/api/admin', require('./routes/adminRoutes'));
 
+// OAuth redirect target for connecting sender mailboxes (Gmail/Outlook).
+app.use('/api/oauth', require('./routes/oauthRoutes'));
+
 // Public recipient-facing surface (no app login; own tokens).
 app.use('/api/view', require('./routes/publicViewRoutes'));
 app.use('/api/sign', require('./routes/publicSignRoutes'));

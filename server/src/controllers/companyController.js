@@ -13,7 +13,17 @@ const serialize = (company) => ({
   emails: (company.Emails || [])
     .slice()
     .sort((a, b) => (b.IsDefault ? 1 : 0) - (a.IsDefault ? 1 : 0))
-    .map((e) => ({ id: e.id, email: e.Email, label: e.Label, isDefault: e.IsDefault, verified: Boolean(e.VerifiedAt) })),
+    .map((e) => ({
+      id: e.id,
+      email: e.Email,
+      label: e.Label,
+      isDefault: e.IsDefault,
+      verified: Boolean(e.VerifiedAt),
+      provider: e.Provider || null,
+      // Only a connected + verified mailbox can send signature-request emails.
+      canSend: Boolean(e.Provider && e.VerifiedAt),
+      connectedAt: e.OAuthConnectedAt || null
+    })),
   createdAt: company.createdAt
 });
 

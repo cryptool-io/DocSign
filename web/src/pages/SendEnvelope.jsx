@@ -106,14 +106,18 @@ export default function SendEnvelope() {
     if (docEncrypted && deliveryMode === 'email') setDeliveryMode('link');
   }, [docEncrypted]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Selected company drives the send-as address list.
+  // Selected company drives the send-as address list. Only CONNECTED mailboxes
+  // can send email, so email delivery is limited to those.
   const selectedCompany = companies.find((c) => c.id === companyId) || null;
+  const sendableEmails = (selectedCompany?.emails || []).filter((e) => e.canSend);
+  const noSendableMailbox = deliveryMode === 'email' && Boolean(companyId) && sendableEmails.length === 0;
   useEffect(() => {
     if (!selectedCompany) {
       setFromEmail('');
       return;
     }
-    const def = selectedCompany.emails.find((e) => e.isDefault) || selectedCompany.emails[0];
+    const pool = sendableEmails.length ? sendableEmails : selectedCompany.emails;
+    const def = pool.find((e) => e.isDefault) || pool[0];
     setFromEmail(def ? def.email : '');
   }, [companyId]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -470,11 +474,11 @@ export default function SendEnvelope() {
               </p>
             )}
           </div>
-          {selectedCompany && selectedCompany.emails.length > 0 && (
+          {selectedCompany && deliveryMode === 'email' && sendableEmails.length > 0 && (
             <div className="field">
               <label>Send from</label>
               <select className="select" value={fromEmail} onChange={(e) => setFromEmail(e.target.value)}>
-                {selectedCompany.emails.map((e) => (
+                {sendableEmails.map((e) => (
                   <option key={e.id} value={e.email}>
                     {selectedCompany.senderName || selectedCompany.name} &lt;{e.email}&gt;
                   </option>
@@ -483,6 +487,11 @@ export default function SendEnvelope() {
             </div>
           )}
         </div>
+        {noSendableMailbox && (
+          <p className="badge amber" style={{ display: 'inline-block' }}>
+            No connected mailbox for this company. Connect Gmail/Outlook under Companies, or use a share link instead.
+          </p>
+        )}
         {deliveryMode === 'link' ? (
           <label className="checkbox">
             <input type="checkbox" checked={requireVerification} onChange={(e) => setRequireVerification(e.target.checked)} />
@@ -496,7 +505,7 @@ export default function SendEnvelope() {
       </div>
 
       <div className="wrap-actions">
-        <button className="btn primary" disabled={sending} onClick={() => submit(true)}>
+        <button className="btn primary" disabled={sending || noSendableMailbox} onClick={() => submit(true)}>
           {sending ? 'Working…' : deliveryMode === 'link' ? 'Create signing link' : 'Send for signature'}
         </button>
         <button className="btn" disabled={sending} onClick={() => submit(false)}>

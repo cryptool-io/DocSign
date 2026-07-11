@@ -10,9 +10,39 @@ const {
 const { DocCompany, DocCompanyEmail } = require('../models');
 const { generateOpaqueToken } = require('../services/docroom/tokens');
 const { appendAuditEvent } = require('../services/docroom/hashChain');
-const { APP_BASE_URL, signatureRequest } = require('../services/email');
+const { APP_BASE_URL, signatureRequest, signatureRequestHtml } = require('../services/email');
+const oauth = require('../services/emailOAuth');
+const { decryptSecret } = require('../services/secretStore');
 const { asyncHandler, notFound, badRequest, forbidden } = require('../utils/http');
 const { resolveCompanyId, companyFilter } = require('../utils/companyScope');
+
+/**
+ * For email delivery from a company address, resolve the CONNECTED mailbox to
+ * send through. Enforces the rule: only a connected + verified address may send.
+ * Returns null when there's no company (personal → global system mailbox).
+ */
+const resolveSendingConnection = async (ownerId, companyId, fromEmail) => {
+  if (!companyId || !fromEmail) return null;
+  const record = await DocCompanyEmail.scope('withTokens').findOne({
+    where: { Email: fromEmail },
+    include: [{ association: 'Company', where: { id: companyId, OwnerId: ownerId }, required: true }]
+  });
+  if (!record) throw badRequest(`${fromEmail} is not linked to this company.`, 'bad_from_email');
+  if (!record.Provider || !record.VerifiedAt || !record.OAuthRefreshTokenEnc) {
+    throw badRequest(
+      `Connect and verify ${fromEmail} before sending from it (or share a signing link instead).`,
+      'sender_not_connected'
+    );
+  }
+  if (!oauth.isConfigured(record.Provider)) {
+    throw badRequest(`${record.Provider} email isn't configured on this server.`, 'provider_not_configured');
+  }
+  return {
+    provider: record.Provider,
+    refreshToken: decryptSecret(record.OAuthRefreshTokenEnc),
+    fromEmail: record.Email
+  };
+};
 
 const signUrl = (token) => `${APP_BASE_URL}/sign/${token}`;
 
@@ -265,6 +295,12 @@ exports.send = asyncHandler(async (req, res) => {
 
   const isLink = env.DeliveryMode === 'link';
 
+  // Resolve (and gate on) the sending mailbox BEFORE marking the envelope sent,
+  // so a "not connected" error leaves it as a draft the user can fix.
+  const identity = isLink ? null : await resolveSenderIdentity(req.userId, env.DocCompanyId, env.FromEmail, req.user);
+  const connection = isLink ? null : await resolveSendingConnection(req.userId, env.DocCompanyId, env.FromEmail);
+  if (connection) connection.fromName = identity.fromName;
+
   await sequelize.transaction(async (t) => {
     await env.update({ Status: 'sent', SentAt: new Date() }, { transaction: t });
     await appendAuditEvent(
@@ -286,10 +322,18 @@ exports.send = asyncHandler(async (req, res) => {
   });
 
   if (!isLink) {
-    const identity = await resolveSenderIdentity(req.userId, env.DocCompanyId, env.FromEmail, req.user);
     await Promise.allSettled(
-      active.map((s) =>
-        signatureRequest({
+      active.map((s) => {
+        if (connection) {
+          // Send through the user's own connected mailbox (Gmail/Outlook).
+          return oauth.sendViaConnection(connection, {
+            to: s.Email,
+            subject: env.Subject || `${identity.fromName} requested your signature`,
+            html: signatureRequestHtml({ signerName: s.Name, senderName: identity.fromName, message: env.Message, signUrl: signUrl(s.AccessToken) }),
+            replyTo: identity.replyTo
+          });
+        }
+        return signatureRequest({
           to: s.Email,
           signerName: s.Name,
           senderName: identity.fromName,
@@ -298,8 +342,8 @@ exports.send = asyncHandler(async (req, res) => {
           subject: env.Subject,
           message: env.Message,
           signUrl: signUrl(s.AccessToken)
-        })
-      )
+        });
+      })
     );
   }
 

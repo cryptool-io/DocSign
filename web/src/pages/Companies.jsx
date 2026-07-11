@@ -1,28 +1,13 @@
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import api, { apiError } from '../lib/api.js';
 import { useCompany } from '../lib/company.js';
 import { Spinner, useToast } from '../lib/ui.jsx';
 
-function CompanyCard({ company, onChanged }) {
+function CompanyCard({ company, providers, onChanged }) {
   const toast = useToast();
-  const [email, setEmail] = useState('');
-  const [label, setLabel] = useState('');
   const [busy, setBusy] = useState(false);
 
-  const addEmail = async () => {
-    if (!email.trim()) return;
-    setBusy(true);
-    try {
-      await api.post(`/companies/${company.id}/emails`, { email, label: label || null });
-      setEmail('');
-      setLabel('');
-      onChanged();
-    } catch (e) {
-      toast(apiError(e), 'err');
-    } finally {
-      setBusy(false);
-    }
-  };
   const removeEmail = async (id) => {
     await api.delete(`/companies/${company.id}/emails/${id}`);
     onChanged();
@@ -31,10 +16,27 @@ function CompanyCard({ company, onChanged }) {
     await api.post(`/companies/${company.id}/emails/${id}/default`);
     onChanged();
   };
+  const disconnect = async (id) => {
+    if (!confirm('Disconnect this mailbox? It will no longer be able to send.')) return;
+    await api.delete(`/companies/${company.id}/emails/${id}/connection`);
+    onChanged();
+  };
   const archive = async () => {
     if (!confirm(`Archive ${company.name}?`)) return;
     await api.delete(`/companies/${company.id}`);
     onChanged();
+  };
+
+  // Kick off the OAuth connect flow: get the provider URL, then redirect there.
+  const connect = async (provider) => {
+    setBusy(true);
+    try {
+      const { data } = await api.get(`/companies/${company.id}/connect/${provider}`);
+      window.location.href = data.data.url;
+    } catch (e) {
+      toast(apiError(e), 'err');
+      setBusy(false);
+    }
   };
 
   return (
@@ -51,52 +53,66 @@ function CompanyCard({ company, onChanged }) {
         </button>
       </div>
 
-      <label className="field" style={{ marginBottom: 8 }}>
-        <span style={{ fontWeight: 600, fontSize: 13 }}>Send-as email addresses</span>
-      </label>
+      <div className="field" style={{ marginBottom: 8 }}>
+        <span style={{ fontWeight: 600, fontSize: 13 }}>Connected sending mailboxes</span>
+      </div>
       <table className="mb">
         <tbody>
           {company.emails.length === 0 && (
             <tr>
-              <td className="muted">No linked emails yet. Add the addresses you send/sign as.</td>
+              <td className="muted">No mailboxes connected yet. Connect one below to send "Please sign" emails from your own address.</td>
             </tr>
           )}
           {company.emails.map((e) => (
             <tr key={e.id}>
               <td>
-                {e.email} {e.label && <span className="muted">· {e.label}</span>}
+                {e.email}
                 {e.isDefault && <span className="badge blue" style={{ marginLeft: 8 }}>default</span>}
-                {!e.verified && <span className="badge amber" style={{ marginLeft: 8 }}>unverified</span>}
+                {e.canSend ? (
+                  <span className="badge green" style={{ marginLeft: 8 }}>
+                    connected · {e.provider === 'google' ? 'Gmail' : e.provider === 'microsoft' ? 'Outlook' : e.provider}
+                  </span>
+                ) : (
+                  <span className="badge amber" style={{ marginLeft: 8 }}>not connected — can't send</span>
+                )}
               </td>
               <td style={{ textAlign: 'right' }}>
-                {!e.isDefault && (
+                {e.canSend && !e.isDefault && (
                   <button className="btn sm" onClick={() => setDefault(e.id)}>
                     Make default
                   </button>
                 )}{' '}
-                <button className="btn sm danger" onClick={() => removeEmail(e.id)}>
-                  Remove
-                </button>
+                {e.canSend ? (
+                  <button className="btn sm danger" onClick={() => disconnect(e.id)}>
+                    Disconnect
+                  </button>
+                ) : (
+                  <button className="btn sm danger" onClick={() => removeEmail(e.id)}>
+                    Remove
+                  </button>
+                )}
               </td>
             </tr>
           ))}
         </tbody>
       </table>
-      <div className="row" style={{ alignItems: 'flex-end' }}>
-        <div className="field" style={{ marginBottom: 0 }}>
-          <label>Add email</label>
-          <input className="input" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="deals@company.com" />
-        </div>
-        <div className="field" style={{ marginBottom: 0, flex: 0.6 }}>
-          <label>Label</label>
-          <input className="input" value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Deals" />
-        </div>
-        <button className="btn" style={{ marginBottom: 0 }} disabled={busy} onClick={addEmail}>
-          Add
-        </button>
+
+      <div className="wrap-actions">
+        {providers.map((p) => (
+          <button
+            key={p.provider}
+            className="btn"
+            disabled={busy || !p.configured}
+            title={p.configured ? '' : `${p.label} sign-in isn't configured on this server yet`}
+            onClick={() => connect(p.provider)}
+          >
+            Connect {p.provider === 'google' ? 'Gmail' : p.provider === 'microsoft' ? 'Outlook' : p.label}
+            {!p.configured && ' (not configured)'}
+          </button>
+        ))}
       </div>
       <p className="muted" style={{ fontSize: 12, marginTop: 10 }}>
-        To actually deliver mail from an address, its domain must be verified with your email provider (SES).
+        Connecting signs you in with the provider and lets DocSign send signature requests from that address, through your own mailbox. Only connected addresses can send.
       </p>
     </div>
   );
@@ -105,9 +121,11 @@ function CompanyCard({ company, onChanged }) {
 export default function Companies() {
   const { companies, load } = useCompany();
   const [loading, setLoading] = useState(true);
+  const [providers, setProviders] = useState([]);
   const [form, setForm] = useState({ name: '', senderName: '', senderEmail: '' });
   const [busy, setBusy] = useState(false);
   const toast = useToast();
+  const [params, setParams] = useSearchParams();
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }));
 
   const refresh = async () => {
@@ -116,7 +134,22 @@ export default function Companies() {
   };
   useEffect(() => {
     refresh();
+    api.get('/companies/email-providers').then((r) => setProviders(r.data.data)).catch(() => {});
   }, []);
+
+  // Surface the result of an OAuth connect round-trip (?connect=success|error_*).
+  useEffect(() => {
+    const c = params.get('connect');
+    if (!c) return;
+    if (c === 'success') {
+      toast('Mailbox connected');
+      refresh();
+    } else {
+      toast(`Could not connect: ${c.replace('error_', '').replace(/_/g, ' ') || 'error'}`, 'err');
+    }
+    params.delete('connect');
+    setParams(params, { replace: true });
+  }, [params]);
 
   const create = async (e) => {
     e.preventDefault();
@@ -173,7 +206,7 @@ export default function Companies() {
       {companies.length === 0 ? (
         <div className="empty">No companies yet. Create one to send as a distinct brand.</div>
       ) : (
-        companies.map((c) => <CompanyCard key={c.id} company={c} onChanged={refresh} />)
+        companies.map((c) => <CompanyCard key={c.id} company={c} providers={providers} onChanged={refresh} />)
       )}
     </>
   );

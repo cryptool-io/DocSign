@@ -105,6 +105,14 @@ const linkViewedNotice = ({ to, docName, viewerEmail, when }) =>
     )
   });
 
+// Shared HTML so the request can go via the global mailbox OR a connected one.
+const signatureRequestHtml = ({ signerName, senderName, message, signUrl }) =>
+  layout(
+    `${senderName} requested your signature`,
+    `<p>Hi ${signerName},</p>${message ? `<p>${message}</p>` : ''}<p>Please review and sign the document.</p>`,
+    { label: 'Review & sign', url: signUrl }
+  );
+
 const signatureRequest = ({ to, signerName, senderName, fromEmail, replyTo, subject, message, signUrl }) =>
   sendEmail({
     to,
@@ -112,11 +120,7 @@ const signatureRequest = ({ to, signerName, senderName, fromEmail, replyTo, subj
     fromEmail,
     replyTo,
     subject: subject || `${senderName} requested your signature`,
-    html: layout(
-      `${senderName} requested your signature`,
-      `<p>Hi ${signerName},</p>${message ? `<p>${message}</p>` : ''}<p>Please review and sign the document.</p>`,
-      { label: 'Review & sign', url: signUrl }
-    )
+    html: signatureRequestHtml({ signerName, senderName, message, signUrl })
   });
 
 const signerOtp = ({ to, code }) =>
@@ -150,6 +154,7 @@ module.exports = {
   resetPassword,
   linkViewedNotice,
   signatureRequest,
+  signatureRequestHtml,
   signerOtp,
   envelopeCompleted
 };

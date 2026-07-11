@@ -20,9 +20,21 @@ module.exports = (sequelize, DataTypes) => {
       },
       Label: { type: DataTypes.STRING, allowNull: true },
       IsDefault: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
-      VerifiedAt: { type: DataTypes.DATE, allowNull: true }
+      VerifiedAt: { type: DataTypes.DATE, allowNull: true },
+      Provider: { type: DataTypes.STRING, allowNull: true },
+      OAuthRefreshTokenEnc: { type: DataTypes.TEXT, allowNull: true },
+      OAuthConnectedAt: { type: DataTypes.DATE, allowNull: true },
+      OAuthScope: { type: DataTypes.TEXT, allowNull: true }
     },
-    { sequelize, modelName: 'DocCompanyEmail', tableName: 'DocCompanyEmails', timestamps: true }
+    {
+      sequelize,
+      modelName: 'DocCompanyEmail',
+      tableName: 'DocCompanyEmails',
+      timestamps: true,
+      // The refresh token never leaves the server; hide it from default reads.
+      defaultScope: { attributes: { exclude: ['OAuthRefreshTokenEnc'] } },
+      scopes: { withTokens: { attributes: { include: ['OAuthRefreshTokenEnc'] } } }
+    }
   );
 
   return DocCompanyEmail;

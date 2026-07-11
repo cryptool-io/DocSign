@@ -77,6 +77,59 @@ first user's role to `admin` in the DB to enable it:
 UPDATE "Users" SET "Role" = 'admin' WHERE "Email" = 'you@cryptool.io';
 ```
 
+## Connecting sender mailboxes (send "Please sign" from your own address)
+
+By default, signature-request emails go out from the system mailbox (`MAIL_FROM_EMAIL`).
+To send them **from your own address** (e.g. `deals@cryptool.io`) through your own
+mailbox, users connect Gmail or Outlook by OAuth on the **Companies** page. Only a
+connected + verified address can be used as the "from" for email delivery; link
+delivery never needs a mailbox.
+
+This requires OAuth apps **you register** with each provider (the app is inert until
+then — the Connect buttons show "not configured").
+
+First, set a token-encryption key (encrypts stored refresh tokens at rest):
+
+```bash
+# server/.env.local
+EMAIL_TOKEN_ENC_KEY=$(node -e "console.log(require('crypto').randomBytes(32).toString('base64'))")
+```
+
+### Google (Gmail)
+
+1. Google Cloud Console → create/select a project → **APIs & Services**.
+2. Enable the **Gmail API**.
+3. **OAuth consent screen**: External; add scopes `openid`, `email`,
+   `https://www.googleapis.com/auth/gmail.send`. While in "Testing", add each sending
+   user as a test user (no Google review needed for a small team). For wider use,
+   submit for verification (the `gmail.send` scope is "sensitive").
+4. **Credentials → Create OAuth client ID → Web application**. Authorized redirect URI:
+   `https://docsign.cryptool.io/api/oauth/google/callback`
+5. Put the client id/secret in `server/.env.local`:
+   ```
+   GOOGLE_CLIENT_ID=...
+   GOOGLE_CLIENT_SECRET=...
+   ```
+
+### Microsoft (Outlook / Microsoft 365)
+
+1. Azure Portal → **Microsoft Entra ID → App registrations → New registration**.
+   Supported accounts: your tenant (or multitenant).
+2. **Redirect URI** (Web): `https://docsign.cryptool.io/api/oauth/microsoft/callback`
+3. **API permissions → Microsoft Graph → Delegated → `Mail.Send`** (and `offline_access`,
+   `openid`, `email`). Grant admin consent if your tenant requires it.
+4. **Certificates & secrets → New client secret.**
+5. Put them in `server/.env.local`:
+   ```
+   MICROSOFT_CLIENT_ID=...
+   MICROSOFT_CLIENT_SECRET=...
+   ```
+
+Restart the app. On **Companies**, click **Connect Gmail / Connect Outlook**, sign in,
+and the address appears as `connected`. Signature requests sent from it now go out
+through that mailbox. Refresh tokens are stored encrypted (`EMAIL_TOKEN_ENC_KEY`); a
+DB leak yields only ciphertext.
+
 ## Backups
 
 - **Database**: `pg_dump docsign` on your normal schedule — it holds all metadata, the

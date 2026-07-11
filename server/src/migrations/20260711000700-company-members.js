@@ -5,7 +5,7 @@
 module.exports = {
   async up(queryInterface, Sequelize) {
     await queryInterface.createTable('DocCompanyMembers', {
-      id: { type: Sequelize.UUID, defaultValue: Sequelize.UUIDV4, primaryKey: true },
+      id: { type: Sequelize.UUID, primaryKey: true, defaultValue: Sequelize.literal('uuid_generate_v4()') },
       DocCompanyId: {
         type: Sequelize.UUID,
         allowNull: false,

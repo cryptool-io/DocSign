@@ -10,7 +10,7 @@ const {
 const { DocCompany, DocCompanyEmail } = require('../models');
 const { generateOpaqueToken } = require('../services/docroom/tokens');
 const { appendAuditEvent } = require('../services/docroom/hashChain');
-const { APP_BASE_URL, signatureRequest, signatureRequestHtml, systemCanSendFrom } = require('../services/email');
+const { APP_BASE_URL, signatureRequest, signatureRequestHtml, systemCanSendFrom, sendViaSmtp } = require('../services/email');
 const oauth = require('../services/emailOAuth');
 const { decryptSecret } = require('../services/secretStore');
 const { asyncHandler, notFound, badRequest, forbidden } = require('../utils/http');
@@ -28,16 +28,34 @@ const resolveSendingConnection = async (ownerId, companyId, fromEmail) => {
     include: [{ association: 'Company', where: { id: companyId, OwnerId: ownerId }, required: true }]
   });
   if (!record) throw badRequest(`${fromEmail} is not linked to this company.`, 'bad_from_email');
-  if (!record.Provider || !record.VerifiedAt || !record.OAuthRefreshTokenEnc) {
+  if (!record.Provider || !record.VerifiedAt) {
     throw badRequest(
       `Connect and verify ${fromEmail} before sending from it (or share a signing link instead).`,
       'sender_not_connected'
     );
   }
+  // The user's own SMTP mailbox (app password).
+  if (record.Provider === 'smtp') {
+    if (!record.SmtpPasswordEnc) throw badRequest(`Reconnect ${fromEmail}: its mailbox password is missing.`, 'sender_not_connected');
+    return {
+      kind: 'smtp',
+      host: record.SmtpHost,
+      port: record.SmtpPort,
+      secure: record.SmtpSecure,
+      user: record.SmtpUsername || record.Email,
+      pass: decryptSecret(record.SmtpPasswordEnc),
+      fromEmail: record.Email
+    };
+  }
+  // OAuth mailbox (Gmail/Outlook).
+  if (!record.OAuthRefreshTokenEnc) {
+    throw badRequest(`Reconnect ${fromEmail} before sending from it.`, 'sender_not_connected');
+  }
   if (!oauth.isConfigured(record.Provider)) {
     throw badRequest(`${record.Provider} email isn't configured on this server.`, 'provider_not_configured');
   }
   return {
+    kind: 'oauth',
     provider: record.Provider,
     refreshToken: decryptSecret(record.OAuthRefreshTokenEnc),
     fromEmail: record.Email
@@ -366,13 +384,15 @@ exports.send = asyncHandler(async (req, res) => {
     await Promise.allSettled(
       active.map((s) => {
         if (connection) {
-          // Send through the user's own connected mailbox (Gmail/Outlook).
-          return oauth.sendViaConnection(connection, {
+          const msg = {
             to: s.Email,
             subject: env.Subject || `${identity.fromName} requested your signature`,
             html: signatureRequestHtml({ signerName: s.Name, senderName: identity.fromName, message: env.Message, signUrl: signUrl(s.AccessToken) }),
             replyTo: identity.replyTo
-          });
+          };
+          // Send through the user's own connected mailbox: SMTP or OAuth.
+          if (connection.kind === 'smtp') return sendViaSmtp(connection, msg);
+          return oauth.sendViaConnection(connection, msg);
         }
         return signatureRequest({
           to: s.Email,

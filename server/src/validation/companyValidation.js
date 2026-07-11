@@ -31,4 +31,14 @@ const addEmail = Joi.object({
   isDefault: Joi.boolean().default(false)
 });
 
-module.exports = { create, update, addEmail };
+const connectSmtp = Joi.object({
+  email: Joi.string().email().max(254).lowercase().trim().required(),
+  host: Joi.string().hostname().max(255).required(),
+  port: Joi.number().integer().min(1).max(65535).default(587),
+  secure: Joi.boolean().default(false),
+  username: Joi.string().max(254).allow('', null),
+  password: Joi.string().min(1).max(512).required(),
+  fromName: Joi.string().max(160).allow('', null)
+});
+
+module.exports = { create, update, addEmail, connectSmtp };

@@ -4,9 +4,44 @@ import api, { apiError } from '../lib/api.js';
 import { useCompany } from '../lib/company.js';
 import { Spinner, useToast } from '../lib/ui.jsx';
 
+const SMTP_PRESETS = {
+  gmail: { label: 'Gmail / Google Workspace', host: 'smtp.gmail.com', port: 465, secure: true, hint: 'Requires 2-Step Verification, then an App Password (myaccount.google.com → Security → App passwords).' },
+  outlook: { label: 'Outlook / Microsoft 365', host: 'smtp.office365.com', port: 587, secure: false, hint: 'Use an app password if your account has 2FA enabled.' },
+  custom: { label: 'Other / custom SMTP', host: '', port: 587, secure: false, hint: 'Enter your mail host, port, and credentials.' }
+};
+
 function CompanyCard({ company, providers, onChanged }) {
   const toast = useToast();
   const [busy, setBusy] = useState(false);
+  const [showSmtp, setShowSmtp] = useState(false);
+  const [smtp, setSmtp] = useState({ preset: 'gmail', email: '', host: 'smtp.gmail.com', port: 465, secure: true, username: '', password: '' });
+
+  const pickPreset = (preset) => {
+    const p = SMTP_PRESETS[preset];
+    setSmtp((s) => ({ ...s, preset, host: p.host, port: p.port, secure: p.secure }));
+  };
+  const connectSmtp = async (e) => {
+    e.preventDefault();
+    setBusy(true);
+    try {
+      await api.post(`/companies/${company.id}/smtp`, {
+        email: smtp.email,
+        host: smtp.host,
+        port: Number(smtp.port),
+        secure: smtp.secure,
+        username: smtp.username || smtp.email,
+        password: smtp.password
+      });
+      toast('Mailbox connected — it can now send signature requests.');
+      setShowSmtp(false);
+      setSmtp((s) => ({ ...s, email: '', username: '', password: '' }));
+      onChanged();
+    } catch (err) {
+      toast(apiError(err), 'err');
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const removeEmail = async (id) => {
     await api.delete(`/companies/${company.id}/emails/${id}`);
@@ -71,7 +106,7 @@ function CompanyCard({ company, providers, onChanged }) {
                 {e.isDefault && <span className="badge blue" style={{ marginLeft: 8 }}>default</span>}
                 {e.canSend ? (
                   <span className="badge green" style={{ marginLeft: 8 }}>
-                    connected · {e.provider === 'google' ? 'Gmail' : e.provider === 'microsoft' ? 'Outlook' : e.provider}
+                    connected · {e.provider === 'google' ? 'Gmail' : e.provider === 'microsoft' ? 'Outlook' : e.provider === 'smtp' ? `mailbox${e.smtpHost ? ` (${e.smtpHost})` : ''}` : e.provider}
                   </span>
                 ) : e.systemSend ? (
                   <span className="badge green" style={{ marginLeft: 8 }} title={`Sent through the ${e.systemDomain} system mailbox`}>
@@ -103,6 +138,9 @@ function CompanyCard({ company, providers, onChanged }) {
       </table>
 
       <div className="wrap-actions">
+        <button className="btn primary" disabled={busy} onClick={() => setShowSmtp((v) => !v)}>
+          {showSmtp ? 'Cancel' : '+ Connect a mailbox'}
+        </button>
         {providers.map((p) => (
           <button
             key={p.provider}
@@ -111,13 +149,59 @@ function CompanyCard({ company, providers, onChanged }) {
             title={p.configured ? '' : `${p.label} sign-in isn't configured on this server yet`}
             onClick={() => connect(p.provider)}
           >
-            Connect {p.provider === 'google' ? 'Gmail' : p.provider === 'microsoft' ? 'Outlook' : p.label}
-            {!p.configured && ' (not configured)'}
+            Connect {p.provider === 'google' ? 'Gmail' : p.provider === 'microsoft' ? 'Outlook' : p.label} (one-click)
+            {!p.configured && ' — soon'}
           </button>
         ))}
       </div>
+
+      {showSmtp && (
+        <form className="card mt" style={{ background: 'var(--panel, #fafafa)' }} onSubmit={connectSmtp}>
+          <div className="field">
+            <label>Mail provider</label>
+            <select className="select" value={smtp.preset} onChange={(e) => pickPreset(e.target.value)}>
+              {Object.entries(SMTP_PRESETS).map(([k, p]) => (
+                <option key={k} value={k}>{p.label}</option>
+              ))}
+            </select>
+          </div>
+          <div className="row">
+            <div className="field">
+              <label>Send-from email</label>
+              <input className="input" type="email" required value={smtp.email} onChange={(e) => setSmtp((s) => ({ ...s, email: e.target.value }))} placeholder="you@company.com" />
+            </div>
+            <div className="field">
+              <label>App password</label>
+              <input className="input" type="password" required value={smtp.password} onChange={(e) => setSmtp((s) => ({ ...s, password: e.target.value }))} placeholder="app password" autoComplete="new-password" />
+            </div>
+          </div>
+          <div className="row">
+            <div className="field">
+              <label>SMTP host</label>
+              <input className="input" required value={smtp.host} onChange={(e) => setSmtp((s) => ({ ...s, host: e.target.value }))} placeholder="smtp.example.com" />
+            </div>
+            <div className="field" style={{ maxWidth: 110 }}>
+              <label>Port</label>
+              <input className="input" type="number" value={smtp.port} onChange={(e) => setSmtp((s) => ({ ...s, port: e.target.value, secure: Number(e.target.value) === 465 }))} />
+            </div>
+            <div className="field" style={{ maxWidth: 160 }}>
+              <label>Username (optional)</label>
+              <input className="input" value={smtp.username} onChange={(e) => setSmtp((s) => ({ ...s, username: e.target.value }))} placeholder="defaults to email" />
+            </div>
+          </div>
+          <label className="checkbox">
+            <input type="checkbox" checked={smtp.secure} onChange={(e) => setSmtp((s) => ({ ...s, secure: e.target.checked }))} />
+            Use SSL/TLS (on for port 465; off for 587/STARTTLS)
+          </label>
+          <p className="muted" style={{ fontSize: 12, margin: '8px 0' }}>{SMTP_PRESETS[smtp.preset].hint}</p>
+          <button className="btn primary" disabled={busy}>
+            {busy ? 'Verifying…' : 'Verify & connect'}
+          </button>
+        </form>
+      )}
+
       <p className="muted" style={{ fontSize: 12, marginTop: 10 }}>
-        Addresses on our verified mail domain send automatically through the system mailbox — no connection needed. To send from a mailbox on another domain (e.g. a Gmail or Outlook address), connect it here so requests go out through your own account.
+        Addresses on our verified mail domain send automatically. To send from your own address, connect its mailbox: enter the email and an app password and we'll verify it, then signature requests go out through your account.
       </p>
     </div>
   );

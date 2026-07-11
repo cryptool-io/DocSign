@@ -83,6 +83,36 @@ const sendEmail = async ({ to, subject, html, text, fromName, fromEmail, replyTo
   return getTransporter().sendMail(message);
 };
 
+/* ---- Per-connection SMTP (a client's own mailbox) ----------------------- */
+
+// Build a one-off transport for a user-connected SMTP mailbox (app password).
+const smtpTransport = ({ host, port, secure, user, pass }) =>
+  nodemailer.createTransport({
+    host,
+    port: parseInt(port, 10),
+    secure: secure === true || secure === 'true' || parseInt(port, 10) === 465,
+    auth: { user, pass }
+  });
+
+// Validate SMTP credentials without sending anything (connect + auth check).
+const verifySmtp = async (config) => {
+  await smtpTransport(config).verify();
+  return { ok: true };
+};
+
+// Send a message THROUGH a client's own SMTP mailbox.
+const sendViaSmtp = async (config, { to, subject, html, text, replyTo }) => {
+  const from = `${config.fromName || FROM_NAME} <${config.fromEmail || config.user}>`;
+  return smtpTransport(config).sendMail({
+    from,
+    to,
+    subject,
+    html,
+    text: text || html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim(),
+    ...(replyTo ? { replyTo } : {})
+  });
+};
+
 /* ---- Concrete templates ------------------------------------------------- */
 
 const verifyEmail = ({ to, name, token }) =>
@@ -162,6 +192,8 @@ module.exports = {
   DRY_RUN,
   SYSTEM_DOMAIN,
   systemCanSendFrom,
+  verifySmtp,
+  sendViaSmtp,
   APP_BASE_URL,
   sendEmail,
   verifyEmail,

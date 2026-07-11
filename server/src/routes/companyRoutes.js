@@ -24,6 +24,7 @@ router.post('/:id/emails/:emailId/default', validate(idParam, 'params'), control
 
 // Connect / disconnect a real mailbox to send from.
 router.get('/:id/connect/:provider', validate(idParam, 'params'), oauthController.authorize);
+router.post('/:id/smtp', validate(idParam, 'params'), validate(schemas.connectSmtp), controller.connectSmtp);
 router.delete('/:id/emails/:emailId/connection', validate(idParam, 'params'), oauthController.disconnect);
 
 module.exports = router;

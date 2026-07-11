@@ -21,19 +21,26 @@ module.exports = (sequelize, DataTypes) => {
       Label: { type: DataTypes.STRING, allowNull: true },
       IsDefault: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
       VerifiedAt: { type: DataTypes.DATE, allowNull: true },
+      // Provider: 'google' | 'microsoft' (OAuth) | 'smtp' (own mailbox).
       Provider: { type: DataTypes.STRING, allowNull: true },
       OAuthRefreshTokenEnc: { type: DataTypes.TEXT, allowNull: true },
       OAuthConnectedAt: { type: DataTypes.DATE, allowNull: true },
-      OAuthScope: { type: DataTypes.TEXT, allowNull: true }
+      OAuthScope: { type: DataTypes.TEXT, allowNull: true },
+      // SMTP (own-mailbox) connection. Password stored encrypted at rest.
+      SmtpHost: { type: DataTypes.STRING, allowNull: true },
+      SmtpPort: { type: DataTypes.INTEGER, allowNull: true },
+      SmtpSecure: { type: DataTypes.BOOLEAN, allowNull: true },
+      SmtpUsername: { type: DataTypes.STRING, allowNull: true },
+      SmtpPasswordEnc: { type: DataTypes.TEXT, allowNull: true }
     },
     {
       sequelize,
       modelName: 'DocCompanyEmail',
       tableName: 'DocCompanyEmails',
       timestamps: true,
-      // The refresh token never leaves the server; hide it from default reads.
-      defaultScope: { attributes: { exclude: ['OAuthRefreshTokenEnc'] } },
-      scopes: { withTokens: { attributes: { include: ['OAuthRefreshTokenEnc'] } } }
+      // Secrets never leave the server; hide them from default reads.
+      defaultScope: { attributes: { exclude: ['OAuthRefreshTokenEnc', 'SmtpPasswordEnc'] } },
+      scopes: { withTokens: { attributes: { include: ['OAuthRefreshTokenEnc', 'SmtpPasswordEnc'] } } }
     }
   );
 

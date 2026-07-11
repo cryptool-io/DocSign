@@ -1,7 +1,8 @@
 const { DocCompany, DocCompanyEmail, sequelize } = require('../models');
 const { asyncHandler, notFound, badRequest, conflict } = require('../utils/http');
 const { slugify } = require('../utils/misc');
-const { systemCanSendFrom, SYSTEM_DOMAIN } = require('../services/email');
+const { systemCanSendFrom, SYSTEM_DOMAIN, verifySmtp } = require('../services/email');
+const { encryptSecret } = require('../services/secretStore');
 
 const serialize = (company) => ({
   id: company.id,
@@ -28,6 +29,7 @@ const serialize = (company) => ({
       // (same verified domain) without connecting anything.
       systemSend: !Boolean(e.Provider && e.VerifiedAt) && systemCanSendFrom(e.Email),
       systemDomain: SYSTEM_DOMAIN,
+      smtpHost: e.SmtpHost || null,
       connectedAt: e.OAuthConnectedAt || null
     })),
   createdAt: company.createdAt
@@ -153,6 +155,52 @@ exports.setDefaultEmail = asyncHandler(async (req, res) => {
   await sequelize.transaction(async (t) => {
     await DocCompanyEmail.update({ IsDefault: false }, { where: { DocCompanyId: company.id }, transaction: t });
     await email.update({ IsDefault: true }, { transaction: t });
+  });
+  res.json({ data: serialize(await withEmails(company.id, req.userId)) });
+});
+
+/**
+ * Connect a sending address via the user's OWN SMTP mailbox (app password).
+ * Verifies the credentials against the SMTP server BEFORE saving, so a bad
+ * password never gets stored. The password is encrypted at rest. Upserts the
+ * linked-email row so the address becomes immediately sendable.
+ */
+exports.connectSmtp = asyncHandler(async (req, res) => {
+  const company = await withEmails(req.params.id, req.userId);
+  if (!company) throw notFound('Company not found');
+  const { email, host, port, secure, username, password, fromName } = req.body;
+  const addr = String(email).trim().toLowerCase();
+  const user = username || addr;
+
+  // Prove the credentials work before persisting anything.
+  try {
+    await verifySmtp({ host, port, secure, user, pass: password });
+  } catch (err) {
+    throw badRequest(`Could not sign in to that mailbox: ${String(err.message || err).slice(0, 200)}`, 'smtp_verify_failed');
+  }
+
+  const makeDefault = (company.Emails || []).length === 0;
+  await sequelize.transaction(async (t) => {
+    let row = await DocCompanyEmail.findOne({ where: { DocCompanyId: company.id, Email: addr }, transaction: t });
+    const fields = {
+      Provider: 'smtp',
+      SmtpHost: host,
+      SmtpPort: parseInt(port, 10),
+      SmtpSecure: secure === true || secure === 'true' || parseInt(port, 10) === 465,
+      SmtpUsername: user,
+      SmtpPasswordEnc: encryptSecret(password),
+      VerifiedAt: new Date(),
+      OAuthConnectedAt: new Date(),
+      Label: fromName || (row && row.Label) || null
+    };
+    if (row) {
+      await row.update(fields, { transaction: t });
+    } else {
+      if (makeDefault) {
+        await DocCompanyEmail.update({ IsDefault: false }, { where: { DocCompanyId: company.id }, transaction: t });
+      }
+      await DocCompanyEmail.create({ DocCompanyId: company.id, Email: addr, IsDefault: makeDefault, ...fields }, { transaction: t });
+    }
   });
   res.json({ data: serialize(await withEmails(company.id, req.userId)) });
 });

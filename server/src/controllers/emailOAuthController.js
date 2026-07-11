@@ -97,6 +97,17 @@ exports.disconnect = asyncHandler(async (req, res) => {
   if (!company) throw notFound('Company not found');
   const email = await DocCompanyEmail.findOne({ where: { id: req.params.emailId, DocCompanyId: company.id } });
   if (!email) throw notFound('Email not found');
-  await email.update({ Provider: null, OAuthRefreshTokenEnc: null, OAuthConnectedAt: null, OAuthScope: null, VerifiedAt: null });
+  await email.update({
+    Provider: null,
+    OAuthRefreshTokenEnc: null,
+    OAuthConnectedAt: null,
+    OAuthScope: null,
+    VerifiedAt: null,
+    SmtpHost: null,
+    SmtpPort: null,
+    SmtpSecure: null,
+    SmtpUsername: null,
+    SmtpPasswordEnc: null
+  });
   res.json({ ok: true });
 });

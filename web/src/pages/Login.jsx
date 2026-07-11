@@ -30,7 +30,7 @@ export default function Login() {
     <div className="public-center">
       <form className="card center-narrow" onSubmit={submit}>
         <div className="brand" style={{ padding: '0 0 16px' }}>
-          Cryptool <span>DocSign</span>
+          <span>DocSign</span>
         </div>
         <h1>Sign in</h1>
         <p className="muted mb">Secure document sharing and signatures.</p>

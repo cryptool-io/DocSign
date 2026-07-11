@@ -30,7 +30,7 @@ export default function Shell() {
     <div className="app-shell">
       <aside className="sidebar">
         <div className="brand">
-          Cryptool <span>DocSign</span>
+          <span>DocSign</span>
         </div>
         <nav className="nav">
           {links.map((l) => (

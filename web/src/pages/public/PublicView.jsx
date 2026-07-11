@@ -139,7 +139,7 @@ export default function PublicView() {
       <div className="public-center">
         <form className="card center-narrow" onSubmit={open}>
           <div className="brand" style={{ padding: '0 0 12px' }}>
-            Cryptool <span>DocSign</span>
+            <span>DocSign</span>
           </div>
           <h1>{meta.name}</h1>
           <p className="muted mb">You've been invited to view this document.</p>

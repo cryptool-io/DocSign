@@ -287,7 +287,7 @@ function Shell({ children }) {
     <div className="public-center">
       <div className="card center-narrow">
         <div className="brand" style={{ padding: '0 0 12px' }}>
-          Cryptool <span>DocSign</span>
+          <span>DocSign</span>
         </div>
         {children}
       </div>

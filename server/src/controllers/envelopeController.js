@@ -8,6 +8,7 @@ const {
   sequelize
 } = require('../models');
 const { DocCompany, DocCompanyEmail } = require('../models');
+const { Op } = require('sequelize');
 const { generateOpaqueToken } = require('../services/docroom/tokens');
 const { appendAuditEvent } = require('../services/docroom/hashChain');
 const { APP_BASE_URL, signatureRequest, signatureRequestHtml, systemCanSendFrom, sendViaSmtp } = require('../services/email');
@@ -18,26 +19,20 @@ const { resolveCompanyId } = require('../utils/companyScope');
 const { listScope, canAccessRecord } = require('../utils/access');
 
 /**
- * For email delivery from a company address, resolve the CONNECTED mailbox to
- * send through. Enforces the rule: only a connected + verified address may send.
- * Returns null when there's no company (personal → global system mailbox).
+ * For email delivery from a company address, resolve a CONNECTED mailbox to send
+ * through, and the address the mail should appear to come FROM. Rule: the
+ * workspace must have at least one connected + verified mailbox. The chosen
+ * `fromEmail` doesn't have to be that mailbox — a workspace can send from any of
+ * its addresses (or an alias of the connected account) THROUGH its one connected
+ * mailbox. (The connected account's own address always sends natively; a true
+ * alias must additionally be a verified "send mail as" on that mailbox, else the
+ * provider rewrites the visible From.) Returns null when there's no company
+ * (personal → global system mailbox).
  */
-const resolveSendingConnection = async (ownerId, companyId, fromEmail) => {
-  if (!companyId || !fromEmail) return null;
-  const record = await DocCompanyEmail.scope('withTokens').findOne({
-    where: { Email: fromEmail },
-    include: [{ association: 'Company', where: { id: companyId, OwnerId: ownerId }, required: true }]
-  });
-  if (!record) throw badRequest(`${fromEmail} is not linked to this company.`, 'bad_from_email');
-  if (!record.Provider || !record.VerifiedAt) {
-    throw badRequest(
-      `Connect and verify ${fromEmail} before sending from it (or share a signing link instead).`,
-      'sender_not_connected'
-    );
-  }
+const connectionFromRecord = (record, fromEmail) => {
   // The user's own SMTP mailbox (app password).
   if (record.Provider === 'smtp') {
-    if (!record.SmtpPasswordEnc) throw badRequest(`Reconnect ${fromEmail}: its mailbox password is missing.`, 'sender_not_connected');
+    if (!record.SmtpPasswordEnc) throw badRequest(`Reconnect the mailbox for ${record.Email}: its password is missing.`, 'sender_not_connected');
     return {
       kind: 'smtp',
       host: record.SmtpHost,
@@ -45,22 +40,46 @@ const resolveSendingConnection = async (ownerId, companyId, fromEmail) => {
       secure: record.SmtpSecure,
       user: record.SmtpUsername || record.Email,
       pass: decryptSecret(record.SmtpPasswordEnc),
-      fromEmail: record.Email
+      fromEmail
     };
   }
   // OAuth mailbox (Gmail/Outlook).
-  if (!record.OAuthRefreshTokenEnc) {
-    throw badRequest(`Reconnect ${fromEmail} before sending from it.`, 'sender_not_connected');
-  }
-  if (!oauth.isConfigured(record.Provider)) {
-    throw badRequest(`${record.Provider} email isn't configured on this server.`, 'provider_not_configured');
-  }
+  if (!record.OAuthRefreshTokenEnc) throw badRequest(`Reconnect ${record.Email} before sending from it.`, 'sender_not_connected');
+  if (!oauth.isConfigured(record.Provider)) throw badRequest(`${record.Provider} email isn't configured on this server.`, 'provider_not_configured');
   return {
     kind: 'oauth',
     provider: record.Provider,
     refreshToken: decryptSecret(record.OAuthRefreshTokenEnc),
-    fromEmail: record.Email
+    fromEmail
   };
+};
+
+const resolveSendingConnection = async (ownerId, companyId, fromEmail) => {
+  if (!companyId || !fromEmail) return null;
+
+  // 1) If the chosen from-address is itself a connected mailbox, send through it.
+  const exact = await DocCompanyEmail.scope('withTokens').findOne({
+    where: { Email: fromEmail },
+    include: [{ association: 'Company', where: { id: companyId, OwnerId: ownerId }, required: true }]
+  });
+  if (exact && exact.Provider && exact.VerifiedAt && (exact.OAuthRefreshTokenEnc || exact.SmtpPasswordEnc)) {
+    return connectionFromRecord(exact, exact.Email);
+  }
+
+  // 2) Otherwise borrow the workspace's connected mailbox and send FROM the
+  //    chosen address (an alias or another address on the same domain).
+  const connected = await DocCompanyEmail.scope('withTokens').findOne({
+    where: { Provider: { [Op.ne]: null }, VerifiedAt: { [Op.ne]: null } },
+    include: [{ association: 'Company', where: { id: companyId, OwnerId: ownerId }, required: true }],
+    order: [['IsDefault', 'DESC']]
+  });
+  if (!connected) {
+    throw badRequest(
+      `Connect a mailbox for this workspace before sending from ${fromEmail} (or share a signing link instead).`,
+      'sender_not_connected'
+    );
+  }
+  return connectionFromRecord(connected, fromEmail);
 };
 
 const signUrl = (token) => `${APP_BASE_URL}/sign/${token}`;
@@ -78,18 +97,17 @@ const resolveSenderIdentity = async (ownerId, companyId, fromEmail, fallbackUser
   });
   if (!company) throw badRequest('Company not found.', 'bad_company');
   const linked = company.Emails || [];
-  let chosen = null;
-  if (fromEmail) {
-    chosen = linked.find((e) => e.Email === fromEmail);
-    if (!chosen) throw badRequest('That from-address is not linked to this company.', 'bad_from_email');
-  } else {
-    chosen = linked.find((e) => e.IsDefault) || linked[0] || null;
-  }
+  // A chosen from-address doesn't have to be a stored row: a workspace can send
+  // from any address on its connected mailbox's domain (e.g. an alias). If it's
+  // not provided, fall back to the default/first stored address.
+  const chosen = fromEmail
+    ? linked.find((e) => e.Email === fromEmail) || null
+    : linked.find((e) => e.IsDefault) || linked[0] || null;
   // Default Reply-To to the intended from-address. If that address is an alias
   // the connected mailbox can't yet send "as" (so the provider rewrites the
   // visible From to the signed-in account), a Reply-To still routes replies back
   // to the workspace address the sender chose.
-  const fromChosen = chosen ? chosen.Email : company.SenderEmail || null;
+  const fromChosen = fromEmail || (chosen ? chosen.Email : company.SenderEmail || null);
   return {
     fromName: company.SenderName || company.Name,
     fromEmail: fromChosen,

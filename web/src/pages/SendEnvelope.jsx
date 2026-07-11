@@ -104,18 +104,21 @@ export default function SendEnvelope() {
     if (docEncrypted && deliveryMode === 'email') setDeliveryMode('link');
   }, [docEncrypted]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Selected company drives the send-as address list. Only CONNECTED mailboxes
-  // can send email, so email delivery is limited to those.
+  // Selected company drives the send-as address list. A workspace can send from
+  // any of its addresses (or an alias) as long as it has ONE connected mailbox to
+  // send through — so email delivery is gated on "has a connected mailbox", not
+  // on the specific chosen address.
   const selectedCompany = companies.find((c) => c.id === companyId) || null;
-  const sendableEmails = (selectedCompany?.emails || []).filter((e) => e.canSend);
-  const noSendableMailbox = deliveryMode === 'email' && Boolean(companyId) && sendableEmails.length === 0;
+  const workspaceEmails = selectedCompany?.emails || [];
+  const hasConnectedMailbox = workspaceEmails.some((e) => e.canSend);
+  const noSendableMailbox = deliveryMode === 'email' && Boolean(companyId) && !hasConnectedMailbox;
   useEffect(() => {
     if (!selectedCompany) {
       setFromEmail('');
       return;
     }
-    const pool = sendableEmails.length ? sendableEmails : selectedCompany.emails;
-    const def = pool.find((e) => e.isDefault) || pool[0];
+    const pool = workspaceEmails.filter((e) => e.canSend);
+    const def = (pool.length ? pool : workspaceEmails).find((e) => e.isDefault) || (pool.length ? pool : workspaceEmails)[0];
     setFromEmail(def ? def.email : '');
   }, [companyId]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -517,16 +520,26 @@ export default function SendEnvelope() {
               </p>
             )}
           </div>
-          {selectedCompany && deliveryMode === 'email' && sendableEmails.length > 0 && (
+          {selectedCompany && deliveryMode === 'email' && (
             <div className="field">
               <label>Send from</label>
-              <select className="select" value={fromEmail} onChange={(e) => setFromEmail(e.target.value)}>
-                {sendableEmails.map((e) => (
+              <input
+                className="input"
+                list="ws-from-emails"
+                value={fromEmail}
+                onChange={(e) => setFromEmail(e.target.value)}
+                placeholder="e.g. hello@yourdomain.com"
+              />
+              <datalist id="ws-from-emails">
+                {workspaceEmails.map((e) => (
                   <option key={e.id} value={e.email}>
-                    {selectedCompany.senderName || selectedCompany.name} &lt;{e.email}&gt;
+                    {e.canSend ? 'connected mailbox' : 'sent via connected mailbox'}
                   </option>
                 ))}
-              </select>
+              </datalist>
+              <p className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+                Pick a saved address or type another on the same mailbox (e.g. <code>micky@…</code> or an alias like <code>hello@…</code>). It's sent through the workspace's connected mailbox.
+              </p>
             </div>
           )}
         </div>

@@ -31,8 +31,29 @@ export const SIGNER_COLORS = ['#2563eb', '#d97706', '#16a34a', '#9333ea', '#dc26
 
 const PAGE_WIDTH = 680;
 
-function PageOverlay({ pageNumber, fields, onAdd, onMove, onRemove, onSelect, selectedId, activeType, colorFor }) {
+function PageOverlay({ pageNumber, fields, onAdd, onMove, onResize, onRemove, onSelect, selectedId, activeType, colorFor }) {
   const ref = useRef();
+
+  // Drag the bottom-right handle to resize (e.g. widen a box for long text).
+  const startResize = (e, field) => {
+    e.stopPropagation();
+    onSelect(field._id);
+    const rect = ref.current.getBoundingClientRect();
+    const move = (ev) => {
+      const right = (ev.clientX - rect.left) / rect.width;
+      const bottom = (ev.clientY - rect.top) / rect.height;
+      onResize(field._id, {
+        width: Math.max(0.03, Math.min(right - field.x, 1 - field.x)),
+        height: Math.max(0.012, Math.min(bottom - field.y, 1 - field.y))
+      });
+    };
+    const up = () => {
+      window.removeEventListener('mousemove', move);
+      window.removeEventListener('mouseup', up);
+    };
+    window.addEventListener('mousemove', move);
+    window.addEventListener('mouseup', up);
+  };
 
   const dropHere = (e) => {
     if (!activeType) return;
@@ -89,7 +110,7 @@ function PageOverlay({ pageNumber, fields, onAdd, onMove, onRemove, onSelect, se
                 fontWeight: 600,
                 color,
                 userSelect: 'none',
-                overflow: 'hidden',
+                overflow: 'visible',
                 outline: selectedId === f._id ? `2px solid ${color}` : 'none',
                 outlineOffset: 2
               }}
@@ -102,6 +123,12 @@ function PageOverlay({ pageNumber, fields, onAdd, onMove, onRemove, onSelect, se
               >
                 ×
               </span>
+              <span
+                onMouseDown={(e) => startResize(e, f)}
+                onClick={(e) => e.stopPropagation()}
+                title="Drag to resize"
+                style={{ position: 'absolute', bottom: -5, right: -5, width: 12, height: 12, background: '#fff', border: `2px solid ${color}`, borderRadius: 2, cursor: 'nwse-resize' }}
+              />
             </div>
           );
         })}
@@ -185,6 +212,7 @@ export default function FieldPlacer({ documentId, doc, fields, setFields, active
     // click the field-type button again to stop placing.
   };
   const moveField = (id, pos) => setFields((cur) => cur.map((f) => (f._id === id ? { ...f, ...pos } : f)));
+  const resizeField = (id, size) => setFields((cur) => cur.map((f) => (f._id === id ? { ...f, ...size } : f)));
   const patchField = (id, patch) => setFields((cur) => cur.map((f) => (f._id === id ? { ...f, ...patch } : f)));
   const setFieldFontSize = (id, fs) => patchField(id, { fontSize: fs, height: heightForFont(fs) });
   const removeField = (id) => setFields((cur) => cur.filter((f) => f._id !== id));
@@ -206,6 +234,7 @@ export default function FieldPlacer({ documentId, doc, fields, setFields, active
               fields={fields}
               onAdd={addField}
               onMove={moveField}
+              onResize={resizeField}
               onRemove={removeField}
               onSelect={setSelectedId}
               selectedId={selectedId}

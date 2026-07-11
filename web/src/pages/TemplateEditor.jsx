@@ -23,8 +23,28 @@ const TEXTY = (t) => t === 'text' || t === 'date';
 // so the placed box matches the size of the text that will be stamped in it.
 const heightForFont = (fs) => Math.min(0.15, Math.max(0.014, (fs * 1.55) / 792));
 
-function PageCanvas({ pageNumber, width, fields, activeType, colorFor, labelFor, onAdd, onMove, onRemove, onSelect, selectedId }) {
+function PageCanvas({ pageNumber, width, fields, activeType, colorFor, labelFor, onAdd, onMove, onResize, onRemove, onSelect, selectedId }) {
   const ref = useRef();
+
+  const startResize = (e, field) => {
+    e.stopPropagation();
+    onSelect(field._id);
+    const rect = ref.current.getBoundingClientRect();
+    const move = (ev) => {
+      const right = (ev.clientX - rect.left) / rect.width;
+      const bottom = (ev.clientY - rect.top) / rect.height;
+      onResize(field._id, {
+        width: Math.max(0.03, Math.min(right - field.x, 1 - field.x)),
+        height: Math.max(0.012, Math.min(bottom - field.y, 1 - field.y))
+      });
+    };
+    const up = () => {
+      window.removeEventListener('mousemove', move);
+      window.removeEventListener('mouseup', up);
+    };
+    window.addEventListener('mousemove', move);
+    window.addEventListener('mouseup', up);
+  };
 
   const onClick = (e) => {
     if (!activeType) return;
@@ -80,6 +100,12 @@ function PageCanvas({ pageNumber, width, fields, activeType, colorFor, labelFor,
             >
               <span style={{ fontSize: 10, lineHeight: 1.1, overflow: 'hidden' }}>{f.label || f.type}</span>
               <span className="del" onClick={(e) => { e.stopPropagation(); onRemove(f._id); }}>×</span>
+              <span
+                onMouseDown={(e) => startResize(e, f)}
+                onClick={(e) => e.stopPropagation()}
+                title="Drag to resize"
+                style={{ position: 'absolute', bottom: -5, right: -5, width: 12, height: 12, background: '#fff', border: `2px solid ${color}`, borderRadius: 2, cursor: 'nwse-resize' }}
+              />
             </div>
           );
         })}
@@ -209,6 +235,7 @@ export default function TemplateEditor() {
   // Changing the text size also resizes the box so it matches the stamped text.
   const setFieldFontSize = (fid, fs) => patchField(fid, { fontSize: fs, height: heightForFont(fs) });
   const moveField = (fid, pos) => setFields((cur) => cur.map((f) => (f._id === fid ? { ...f, ...pos } : f)));
+  const resizeField = (fid, size) => setFields((cur) => cur.map((f) => (f._id === fid ? { ...f, ...size } : f)));
   const patchField = (fid, patch) => setFields((cur) => cur.map((f) => (f._id === fid ? { ...f, ...patch } : f)));
   const removeField = (fid) => setFields((cur) => cur.filter((f) => f._id !== fid));
 
@@ -330,6 +357,7 @@ export default function TemplateEditor() {
                   labelFor={(f) => signerLabel(f.signerRole)}
                   onAdd={addField}
                   onMove={moveField}
+                  onResize={resizeField}
                   onRemove={removeField}
                   onSelect={setSelectedId}
                   selectedId={selectedId}

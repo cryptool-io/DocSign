@@ -23,11 +23,16 @@ export default function PublicSign() {
   const [typedName, setTypedName] = useState('');
   const [sigMode, setSigMode] = useState('type'); // 'type' | 'draw'
   const [drawn, setDrawn] = useState(null); // PNG data URL of the hand-drawn signature
+  const [initMode, setInitMode] = useState('type'); // 'type' | 'draw'
+  const [typedInitials, setTypedInitials] = useState('');
+  const [drawnInitials, setDrawnInitials] = useState(null);
   const [consent, setConsent] = useState(false);
   const [busy, setBusy] = useState(false);
 
   // Is the signature ready? Typed needs a name; drawn needs ink on the canvas.
   const sigReady = sigMode === 'draw' ? !!drawn : !!typedName.trim();
+  const initialsReady = initMode === 'draw' ? !!drawnInitials : !!typedInitials.trim();
+  const hasInitialsFields = fields.some((f) => f.type === 'initials');
 
   const auth = (extra = {}) => ({ headers: { Authorization: `Bearer ${signerToken}`, ...extra } });
 
@@ -38,6 +43,16 @@ export default function PublicSign() {
         const d = r.data.data;
         setMeta(d);
         setTypedName(d.signer.name || '');
+        // Suggest initials from the signer's name (e.g. "Ron Maria Zabel" -> "RMZ").
+        setTypedInitials(
+          String(d.signer.name || '')
+            .split(/\s+/)
+            .map((p) => p[0])
+            .filter(Boolean)
+            .join('')
+            .toUpperCase()
+            .slice(0, 6)
+        );
         if (d.signer.status === 'signed') setStage('done');
         else if (['declined', 'voided'].includes(d.status)) setStage('declined');
         else if (d.requireVerification === false) startNoCode();
@@ -94,6 +109,15 @@ export default function PublicSign() {
         pub.get(`/sign/${token}/file`, { ...auth(), responseType: 'arraybuffer' })
       ]);
       setFields(f.data.data);
+      // Prefill date fields with today's date; the signer can still edit them.
+      const today = new Date().toLocaleDateString();
+      setValues((v) => {
+        const next = { ...v };
+        f.data.data.forEach((fld) => {
+          if (fld.type === 'date' && !next[fld.id]) next[fld.id] = today;
+        });
+        return next;
+      });
       if (file.headers['x-docsign-encrypted'] === 'true') {
         const dekB64 = keyFromHash();
         if (!dekB64) return setError('This signing link is missing its decryption key.');
@@ -109,18 +133,24 @@ export default function PublicSign() {
     if (!consent) return setError('Please agree to sign electronically.');
     if (sigMode === 'draw' && !drawn) return setError('Please draw your signature, or switch to Type.');
     if (sigMode === 'type' && !typedName.trim()) return setError('Please type your full name to use as your signature.');
+    if (hasInitialsFields && initMode === 'draw' && !drawnInitials) return setError('Please draw your initials, or switch to Type.');
+    if (hasInitialsFields && initMode === 'type' && !typedInitials.trim()) return setError('Please enter your initials.');
     setBusy(true);
     setError(null);
     try {
-      const nonSigFields = fields.filter((f) => !['signature', 'initials', 'date'].includes(f.type));
+      // Signature + initials come from the adopt controls; everything else
+      // (date, text, checkbox) is sent as an explicit per-field value.
+      const valueFields = fields.filter((f) => !['signature', 'initials'].includes(f.type));
       const payload = {
         consent: true,
         signatureType: sigMode === 'draw' ? 'drawn' : 'typed',
         signatureData: sigMode === 'draw' ? drawn : typedName,
+        initialsType: initMode === 'draw' ? 'drawn' : 'typed',
+        initialsData: initMode === 'draw' ? drawnInitials : typedInitials,
         // For an encrypted document, hand the server the key (from the link
         // fragment) once, over TLS, so it can decrypt-to-stamp. Never stored.
         documentKey: keyFromHash() || null,
-        values: nonSigFields.map((f) => ({ fieldId: f.id, value: f.type === 'checkbox' ? (values[f.id] ? 'x' : '') : values[f.id] || '' }))
+        values: valueFields.map((f) => ({ fieldId: f.id, value: f.type === 'checkbox' ? (values[f.id] ? 'x' : '') : values[f.id] || '' }))
       };
       // If this browser is also logged into an app account, pass its token so the
       // completed doc is attributed to that user (even if the signing email differs).
@@ -253,6 +283,35 @@ export default function PublicSign() {
           </div>
         )}
 
+        {hasInitialsFields && (
+          <div className="mt" style={{ borderTop: '1px solid var(--border, #eee)', paddingTop: 12 }}>
+            <div className="flex" style={{ gap: 8, marginBottom: 10 }}>
+              <button type="button" className={`btn sm ${initMode === 'type' ? 'primary' : ''}`} onClick={() => setInitMode('type')}>
+                Type initials
+              </button>
+              <button type="button" className={`btn sm ${initMode === 'draw' ? 'primary' : ''}`} onClick={() => setInitMode('draw')}>
+                Draw initials
+              </button>
+            </div>
+            {initMode === 'type' ? (
+              <div className="field" style={{ marginBottom: 0 }}>
+                <label>Your initials</label>
+                <input
+                  className="input"
+                  value={typedInitials}
+                  onChange={(e) => setTypedInitials(e.target.value.slice(0, 6))}
+                  style={{ fontFamily: 'cursive', fontSize: 18, maxWidth: 140 }}
+                />
+              </div>
+            ) : (
+              <div className="field" style={{ marginBottom: 0 }}>
+                <label>Draw your initials</label>
+                <SignaturePad onChange={setDrawnInitials} height={100} />
+              </div>
+            )}
+          </div>
+        )}
+
         <label className="checkbox mt">
           <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} />
           I agree to sign this document electronically and that my electronic signature is legally binding.
@@ -272,10 +331,10 @@ export default function PublicSign() {
                   .filter((f) => f.pageNumber === i + 1)
                   .map((f) => {
                     const filled =
-                      ['signature', 'initials'].includes(f.type)
+                      f.type === 'signature'
                         ? sigReady
-                        : f.type === 'date'
-                        ? true
+                        : f.type === 'initials'
+                        ? initialsReady
                         : f.type === 'checkbox'
                         ? values[f.id]
                         : !!values[f.id];
@@ -285,14 +344,26 @@ export default function PublicSign() {
                         className={`sign-field ${filled ? 'done' : ''}`}
                         style={{ left: `${f.x * 100}%`, top: `${f.y * 100}%`, width: `${f.width * 100}%`, height: `${f.height * 100}%` }}
                       >
-                        {f.type === 'signature' || f.type === 'initials' ? (
+                        {f.type === 'signature' ? (
                           sigMode === 'draw' && drawn ? (
                             <img src={drawn} alt="signature" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
                           ) : (
-                            <span style={{ fontFamily: 'cursive', fontSize: 16 }}>{typedName || f.type}</span>
+                            <span style={{ fontFamily: 'cursive', fontSize: 16 }}>{typedName || 'signature'}</span>
+                          )
+                        ) : f.type === 'initials' ? (
+                          initMode === 'draw' && drawnInitials ? (
+                            <img src={drawnInitials} alt="initials" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+                          ) : (
+                            <span style={{ fontFamily: 'cursive', fontSize: 14 }}>{typedInitials || 'initials'}</span>
                           )
                         ) : f.type === 'date' ? (
-                          new Date().toLocaleDateString()
+                          <input
+                            className="input"
+                            style={{ padding: 2, height: '100%', fontSize: 12, textAlign: 'center' }}
+                            value={values[f.id] || ''}
+                            onChange={(e) => setValues((v) => ({ ...v, [f.id]: e.target.value }))}
+                            title="Signing date (auto-filled; you can edit it)"
+                          />
                         ) : f.type === 'checkbox' ? (
                           <input type="checkbox" checked={!!values[f.id]} onChange={(e) => setValues((v) => ({ ...v, [f.id]: e.target.checked }))} />
                         ) : (
@@ -318,7 +389,7 @@ export default function PublicSign() {
 
 // A simple signature pad: draw with mouse/trackpad/finger, emit a transparent
 // PNG data URL (dark strokes) on every change, or null when cleared.
-function SignaturePad({ onChange }) {
+function SignaturePad({ onChange, height = 160 }) {
   const canvasRef = useRef(null);
   const drawing = useRef(false);
   const inked = useRef(false);
@@ -376,7 +447,7 @@ function SignaturePad({ onChange }) {
     <div>
       <canvas
         ref={canvasRef}
-        style={{ width: '100%', height: 160, border: '1px dashed var(--border, #bbb)', borderRadius: 8, touchAction: 'none', background: '#fff', cursor: 'crosshair' }}
+        style={{ width: '100%', height, border: '1px dashed var(--border, #bbb)', borderRadius: 8, touchAction: 'none', background: '#fff', cursor: 'crosshair' }}
         onMouseDown={start}
         onMouseMove={move}
         onMouseUp={end}

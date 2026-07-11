@@ -269,7 +269,7 @@ exports.submit = asyncHandler(async (req, res) => {
   assertSignable(env, signer);
   if (!(await isSignerTurn(env, signer))) throw forbidden('It is not your turn to sign yet.', 'not_your_turn');
 
-  const { consent, signatureType, signatureData, values, documentKey } = req.body;
+  const { consent, signatureType, signatureData, initialsType, initialsData, values, documentKey } = req.body;
 
   // An encrypted document can only be finalized (stamped) with its key.
   const doc = await DocDocument.findByPk(env.DocDocumentId);
@@ -297,14 +297,28 @@ exports.submit = asyncHandler(async (req, res) => {
 
   const nowIso = new Date().toISOString().slice(0, 10);
   const typedName = signatureType === 'typed' ? String(signatureData).slice(0, 120) : signer.Name;
+  // Initials default to the capitals of the signer's name (e.g. "RMZ") when the
+  // signer didn't supply their own. Typed renders as text; drawn stamps an image.
+  const derivedInitials = String(signer.Name || '')
+    .split(/\s+/)
+    .map((p) => p[0])
+    .filter(Boolean)
+    .join('')
+    .toUpperCase()
+    .slice(0, 6);
+  const typedInitials =
+    initialsType === 'typed' && initialsData ? String(initialsData).slice(0, 12) : derivedInitials;
 
   await sequelize.transaction(async (t) => {
     for (const f of fields) {
       let value = valueMap.get(f.id) ?? null;
-      if (f.Type === 'signature' || f.Type === 'initials') {
+      if (f.Type === 'signature') {
         // Drawn image is stored on the signer; typed renders the name as text.
         value = signatureType === 'typed' ? typedName : null;
+      } else if (f.Type === 'initials') {
+        value = initialsType === 'drawn' ? null : typedInitials;
       } else if (f.Type === 'date' && !value) {
+        // Manual date wins (value already set from the signer); else stamp today.
         value = nowIso;
       } else if (f.Type === 'checkbox') {
         value = value ? 'X' : '';
@@ -319,6 +333,8 @@ exports.submit = asyncHandler(async (req, res) => {
         ConsentedAt: new Date(),
         SignatureType: signatureType,
         SignatureImageKey: signatureType === 'drawn' ? signatureData : null,
+        InitialsType: initialsType || (signatureType === 'drawn' ? 'drawn' : 'typed'),
+        InitialsImageKey: initialsType === 'drawn' ? initialsData : null,
         SignedByUserId: signedByUserId,
         IpAddress: ip,
         UserAgent: ua

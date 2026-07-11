@@ -15,11 +15,21 @@ const { appendAuditEvent, verifyChain } = require('./hashChain');
  * Drawn signatures arrive as data URLs; typed signatures are rendered as text
  * at stamp time (no image), so this returns null for those.
  */
-const decodeSignatureImage = (signer) => {
-  if (signer.SignatureType !== 'drawn' || !signer.SignatureImageKey) return null;
-  const match = /^data:image\/png;base64,(.+)$/i.exec(signer.SignatureImageKey);
+const decodePngDataUrl = (dataUrl) => {
+  if (!dataUrl) return null;
+  const match = /^data:image\/png;base64,(.+)$/i.exec(dataUrl);
   if (!match) return null;
   return Buffer.from(match[1], 'base64');
+};
+
+// The drawn image to stamp into a given field: signature fields use the
+// signature scribble, initials fields use the (separate) initials scribble.
+const drawnImageForField = (signer, fieldType) => {
+  if (!signer) return null;
+  if (fieldType === 'initials') {
+    return signer.InitialsType === 'drawn' ? decodePngDataUrl(signer.InitialsImageKey) : null;
+  }
+  return signer.SignatureType === 'drawn' ? decodePngDataUrl(signer.SignatureImageKey) : null;
 };
 
 /**
@@ -57,7 +67,7 @@ const finalizeEnvelope = async (envelopeId, { documentKey = null } = {}) => {
     const signatureImages = {};
     for (const f of fields) {
       if ((f.Type === 'signature' || f.Type === 'initials') && f.DocEnvelopeSignerId) {
-        const png = decodeSignatureImage(signerById[f.DocEnvelopeSignerId]);
+        const png = drawnImageForField(signerById[f.DocEnvelopeSignerId], f.Type);
         if (png) signatureImages[f.id] = png;
       }
     }

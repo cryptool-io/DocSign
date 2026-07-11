@@ -133,6 +133,7 @@ export default function FieldPlacer({ documentId, doc, fields, setFields, active
       { _id, type: activeType, signerEmail: activeSignerEmail || null, required: true, autoFill: activeType === 'date', label: '', ...partial }
     ]);
     setSelectedId(_id); // select the new field so its options show immediately
+    if (setActiveType) setActiveType(null); // leave "place" mode so the next click selects/moves, not adds
   };
   const moveField = (id, pos) => setFields((cur) => cur.map((f) => (f._id === id ? { ...f, ...pos } : f)));
   const patchField = (id, patch) => setFields((cur) => cur.map((f) => (f._id === id ? { ...f, ...patch } : f)));

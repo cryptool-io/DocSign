@@ -171,11 +171,14 @@ function CompanyCard({ company, providers, onChanged }) {
             {company.senderName || '—'} · {company.senderEmail || 'no default sender'}
           </div>
         </div>
-        <button className="btn sm danger" onClick={archive}>
-          Archive
-        </button>
+        {company.isOwner && (
+          <button className="btn sm danger" onClick={archive}>
+            Archive
+          </button>
+        )}
       </div>
 
+      {company.isOwner && (
       <form className="card mb" style={{ background: 'var(--panel, #fafafa)' }} onSubmit={saveBrand}>
         <div className="field" style={{ marginBottom: 8 }}>
           <span style={{ fontWeight: 600, fontSize: 13 }}>Email branding</span>
@@ -206,6 +209,7 @@ function CompanyCard({ company, providers, onChanged }) {
           <button className="btn" disabled={busy}>Save</button>
         </div>
       </form>
+      )}
 
       {company.isOwner ? (
         <div className="card mb" style={{ background: 'var(--panel, #fafafa)' }}>
@@ -241,6 +245,7 @@ function CompanyCard({ company, providers, onChanged }) {
         <div className="badge amber" style={{ marginBottom: 12 }}>Shared with you · managed by the owner</div>
       )}
 
+      {company.isOwner && (<>
       <div className="field" style={{ marginBottom: 8 }}>
         <span style={{ fontWeight: 600, fontSize: 13 }}>Connected sending mailboxes</span>
       </div>
@@ -355,6 +360,7 @@ function CompanyCard({ company, providers, onChanged }) {
       <p className="muted" style={{ fontSize: 12, marginTop: 10 }}>
         Addresses on our verified mail domain send automatically. To send from your own address, connect its mailbox: enter the email and an app password and we'll verify it, then signature requests go out through your account.
       </p>
+      </>)}
     </div>
   );
 }

@@ -47,7 +47,8 @@ function PageCanvas({ pageNumber, width, fields, activeType, colorFor, labelFor,
   };
 
   const onClick = (e) => {
-    if (!activeType) return;
+    // Click empty page area: place a field if a type is active, else deselect.
+    if (!activeType) return onSelect(null);
     const rect = ref.current.getBoundingClientRect();
     const x = (e.clientX - rect.left) / rect.width;
     const y = (e.clientY - rect.top) / rect.height;
@@ -59,9 +60,16 @@ function PageCanvas({ pageNumber, width, fields, activeType, colorFor, labelFor,
     e.stopPropagation();
     onSelect(field._id);
     const rect = ref.current.getBoundingClientRect();
+    // Grab offset within the field, so it doesn't jump to center under the cursor.
+    const grabX = (e.clientX - rect.left) / rect.width - field.x;
+    const grabY = (e.clientY - rect.top) / rect.height - field.y;
+    const start = { x: e.clientX, y: e.clientY };
+    let dragging = false;
     const move = (ev) => {
-      const x = (ev.clientX - rect.left) / rect.width - field.width / 2;
-      const y = (ev.clientY - rect.top) / rect.height - field.height / 2;
+      if (!dragging && Math.abs(ev.clientX - start.x) + Math.abs(ev.clientY - start.y) < 3) return;
+      dragging = true;
+      const x = (ev.clientX - rect.left) / rect.width - grabX;
+      const y = (ev.clientY - rect.top) / rect.height - grabY;
       onMove(field._id, { x: Math.max(0, Math.min(x, 1 - field.width)), y: Math.max(0, Math.min(y, 1 - field.height)) });
     };
     const up = () => {

@@ -56,7 +56,8 @@ function PageOverlay({ pageNumber, fields, onAdd, onMove, onResize, onRemove, on
   };
 
   const dropHere = (e) => {
-    if (!activeType) return;
+    // Clicking empty page area: place a field if a type is active, else deselect.
+    if (!activeType) return onSelect(null);
     const rect = ref.current.getBoundingClientRect();
     const x = (e.clientX - rect.left) / rect.width;
     const y = (e.clientY - rect.top) / rect.height;
@@ -68,9 +69,17 @@ function PageOverlay({ pageNumber, fields, onAdd, onMove, onResize, onRemove, on
     e.stopPropagation();
     onSelect(field._id);
     const rect = ref.current.getBoundingClientRect();
+    // Grab offset within the field, so it doesn't jump to center under the cursor.
+    const grabX = (e.clientX - rect.left) / rect.width - field.x;
+    const grabY = (e.clientY - rect.top) / rect.height - field.y;
+    const start = { x: e.clientX, y: e.clientY };
+    let dragging = false;
     const move = (ev) => {
-      const x = (ev.clientX - rect.left) / rect.width - field.width / 2;
-      const y = (ev.clientY - rect.top) / rect.height - field.height / 2;
+      // Ignore tiny movements so a plain click doesn't nudge the field.
+      if (!dragging && Math.abs(ev.clientX - start.x) + Math.abs(ev.clientY - start.y) < 3) return;
+      dragging = true;
+      const x = (ev.clientX - rect.left) / rect.width - grabX;
+      const y = (ev.clientY - rect.top) / rect.height - grabY;
       onMove(field._id, { x: Math.max(0, Math.min(x, 1 - field.width)), y: Math.max(0, Math.min(y, 1 - field.height)) });
     };
     const up = () => {

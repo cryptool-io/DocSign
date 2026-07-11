@@ -153,7 +153,10 @@ export default function SendEnvelope() {
     });
     return m;
   }, [signers]);
-  const colorFor = (field) => colorByEmail[field.signerEmail] || '#697280';
+  // Unassigned fields go RED once the user has tried to send, so it's obvious
+  // which ones still need a signer.
+  const [showErrors, setShowErrors] = useState(false);
+  const colorFor = (field) => colorByEmail[field.signerEmail] || (showErrors ? '#dc2626' : '#697280');
 
   // Keep the active placement signer valid as the signer list changes.
   useEffect(() => {
@@ -188,6 +191,26 @@ export default function SendEnvelope() {
     setFromEmail(def ? def.email : '');
   }, [companyId]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Live list of everything blocking a send, recomputed as the form changes so
+  // the red checklist near the buttons clears itself as each item is fixed.
+  const validSigners = signers.filter((s) => s.name && s.email);
+  const validEmailSet = new Set(validSigners.map((s) => s.email));
+  const orphanFieldCount = fields.filter((f) => !f.signerEmail || !validEmailSet.has(f.signerEmail)).length;
+  const problems = useMemo(() => {
+    const p = [];
+    if (!documentId) p.push('Choose a document (step 1).');
+    if (!subject.trim()) p.push('Add a subject (step 4 · Message).');
+    if (validSigners.length === 0) p.push('Add at least one signer with both a name and an email (step 2).');
+    if (orphanFieldCount > 0) {
+      p.push(
+        `${orphanFieldCount} placed field${orphanFieldCount > 1 ? 's are' : ' is'} not assigned to a signer — ` +
+          'shown in red in step 3. Click each one and pick its signer, or fill in that signer’s email.'
+      );
+    }
+    if (noSendableMailbox) p.push('This workspace has no connected mailbox for email delivery — connect one under Workspaces, or switch delivery to a share link (step 5).');
+    return p;
+  }, [documentId, subject, signers, fields, orphanFieldCount, noSendableMailbox]); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Show documents belonging to the chosen workspace (or all when none chosen).
   const filteredDocs = companyId ? docs.filter((d) => d.DocCompanyId === companyId) : docs;
   const setSigner = (i, k, v) => setSigners((s) => s.map((row, idx) => (idx === i ? { ...row, [k]: v } : row)));
@@ -215,19 +238,28 @@ export default function SendEnvelope() {
   };
 
   const submit = async (send) => {
-    if (!documentId) return toast('Choose a document.', 'err');
-    if (!subject.trim()) return toast('Add a subject.', 'err');
-    const valid = signers.filter((s) => s.name && s.email);
-    if (valid.length === 0) return toast('Add at least one signer with a name and email.', 'err');
-
-    // Every placed field must be assigned to a signer who's still in the list.
-    const validEmails = new Set(valid.map((s) => s.email));
-    const orphan = fields.find((f) => !f.signerEmail || !validEmails.has(f.signerEmail));
-    if (orphan) return toast('Every placed field must be assigned to a signer.', 'err');
+    // A draft can be incomplete; a real send must clear everything. Either way we
+    // surface the misses as a persistent red checklist rather than a toast.
+    const blockers = send
+      ? problems
+      : [
+          !documentId && 'Choose a document (step 1).',
+          !subject.trim() && 'Add a subject (step 4 · Message).',
+          validSigners.length === 0 && 'Add at least one signer with a name and email (step 2).'
+        ].filter(Boolean);
+    if (blockers.length) {
+      setShowErrors(true);
+      toast(send ? 'Please fix the highlighted items before sending.' : 'Add a document, subject and signer to save a draft.', 'err');
+      return;
+    }
+    const valid = validSigners;
 
     setSending(true);
     try {
-      const placedFields = fields.map((f) => ({
+      // Only send fields that are actually assigned to a current signer.
+      const placedFields = fields
+        .filter((f) => f.signerEmail && validEmailSet.has(f.signerEmail))
+        .map((f) => ({
         type: f.type,
         signerEmail: f.signerEmail,
         pageNumber: f.pageNumber,
@@ -631,7 +663,13 @@ export default function SendEnvelope() {
         <h2>4 · Message</h2>
         <div className="field">
           <label>Subject</label>
-          <input className="input" value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Please sign: Mutual NDA" />
+          <input
+            className="input"
+            value={subject}
+            onChange={(e) => setSubject(e.target.value)}
+            placeholder="Please sign: Mutual NDA"
+            style={showErrors && !subject.trim() ? { borderColor: '#dc2626' } : undefined}
+          />
         </div>
         <div className="field">
           <label>Message (optional)</label>
@@ -693,6 +731,19 @@ export default function SendEnvelope() {
           </p>
         )}
       </div>
+
+      {showErrors && problems.length > 0 && (
+        <div className="card mb" style={{ border: '1px solid #dc2626', background: '#fef2f2' }}>
+          <div style={{ color: '#b91c1c', fontWeight: 700, marginBottom: 6 }}>
+            {problems.length} thing{problems.length > 1 ? 's' : ''} to fix before you can send:
+          </div>
+          <ul style={{ margin: 0, paddingLeft: 18, color: '#b91c1c', lineHeight: 1.7 }}>
+            {problems.map((p, i) => (
+              <li key={i}>{p}</li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <div className="wrap-actions">
         <button className="btn primary" disabled={sending || noSendableMailbox} onClick={() => submit(true)}>

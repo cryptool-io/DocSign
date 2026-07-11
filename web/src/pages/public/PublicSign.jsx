@@ -21,8 +21,13 @@ export default function PublicSign() {
   const [numPages, setNumPages] = useState(0);
   const [values, setValues] = useState({}); // fieldId -> value
   const [typedName, setTypedName] = useState('');
+  const [sigMode, setSigMode] = useState('type'); // 'type' | 'draw'
+  const [drawn, setDrawn] = useState(null); // PNG data URL of the hand-drawn signature
   const [consent, setConsent] = useState(false);
   const [busy, setBusy] = useState(false);
+
+  // Is the signature ready? Typed needs a name; drawn needs ink on the canvas.
+  const sigReady = sigMode === 'draw' ? !!drawn : !!typedName.trim();
 
   const auth = (extra = {}) => ({ headers: { Authorization: `Bearer ${signerToken}`, ...extra } });
 
@@ -102,14 +107,16 @@ export default function PublicSign() {
 
   const submit = async () => {
     if (!consent) return setError('Please agree to sign electronically.');
+    if (sigMode === 'draw' && !drawn) return setError('Please draw your signature, or switch to Type.');
+    if (sigMode === 'type' && !typedName.trim()) return setError('Please type your full name to use as your signature.');
     setBusy(true);
     setError(null);
     try {
       const nonSigFields = fields.filter((f) => !['signature', 'initials', 'date'].includes(f.type));
       const payload = {
         consent: true,
-        signatureType: 'typed',
-        signatureData: typedName,
+        signatureType: sigMode === 'draw' ? 'drawn' : 'typed',
+        signatureData: sigMode === 'draw' ? drawn : typedName,
         // For an encrypted document, hand the server the key (from the link
         // fragment) once, over TLS, so it can decrypt-to-stamp. Never stored.
         documentKey: keyFromHash() || null,
@@ -217,12 +224,35 @@ export default function PublicSign() {
       </div>
 
       <div className="card mb">
-        <div className="row">
+        <div className="flex" style={{ gap: 8, marginBottom: 12 }}>
+          <button
+            type="button"
+            className={`btn ${sigMode === 'type' ? 'primary' : ''}`}
+            onClick={() => setSigMode('type')}
+          >
+            Type signature
+          </button>
+          <button
+            type="button"
+            className={`btn ${sigMode === 'draw' ? 'primary' : ''}`}
+            onClick={() => setSigMode('draw')}
+          >
+            Draw signature
+          </button>
+        </div>
+
+        {sigMode === 'type' ? (
           <div className="field" style={{ marginBottom: 0 }}>
             <label>Type your full name to use as your signature</label>
             <input className="input" value={typedName} onChange={(e) => setTypedName(e.target.value)} style={{ fontFamily: 'cursive', fontSize: 20 }} />
           </div>
-        </div>
+        ) : (
+          <div className="field" style={{ marginBottom: 0 }}>
+            <label>Draw your signature below (use your mouse, trackpad, or finger)</label>
+            <SignaturePad onChange={setDrawn} />
+          </div>
+        )}
+
         <label className="checkbox mt">
           <input type="checkbox" checked={consent} onChange={(e) => setConsent(e.target.checked)} />
           I agree to sign this document electronically and that my electronic signature is legally binding.
@@ -243,7 +273,7 @@ export default function PublicSign() {
                   .map((f) => {
                     const filled =
                       ['signature', 'initials'].includes(f.type)
-                        ? !!typedName
+                        ? sigReady
                         : f.type === 'date'
                         ? true
                         : f.type === 'checkbox'
@@ -256,7 +286,11 @@ export default function PublicSign() {
                         style={{ left: `${f.x * 100}%`, top: `${f.y * 100}%`, width: `${f.width * 100}%`, height: `${f.height * 100}%` }}
                       >
                         {f.type === 'signature' || f.type === 'initials' ? (
-                          <span style={{ fontFamily: 'cursive', fontSize: 16 }}>{typedName || f.type}</span>
+                          sigMode === 'draw' && drawn ? (
+                            <img src={drawn} alt="signature" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+                          ) : (
+                            <span style={{ fontFamily: 'cursive', fontSize: 16 }}>{typedName || f.type}</span>
+                          )
                         ) : f.type === 'date' ? (
                           new Date().toLocaleDateString()
                         ) : f.type === 'checkbox' ? (
@@ -278,6 +312,84 @@ export default function PublicSign() {
           </Document>
         </div>
       )}
+    </div>
+  );
+}
+
+// A simple signature pad: draw with mouse/trackpad/finger, emit a transparent
+// PNG data URL (dark strokes) on every change, or null when cleared.
+function SignaturePad({ onChange }) {
+  const canvasRef = useRef(null);
+  const drawing = useRef(false);
+  const inked = useRef(false);
+  const last = useRef({ x: 0, y: 0 });
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    const ratio = window.devicePixelRatio || 1;
+    const rect = canvas.getBoundingClientRect();
+    canvas.width = rect.width * ratio;
+    canvas.height = rect.height * ratio;
+    const ctx = canvas.getContext('2d');
+    ctx.scale(ratio, ratio);
+    ctx.lineWidth = 2.2;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    ctx.strokeStyle = '#111';
+  }, []);
+
+  const pos = (e) => {
+    const rect = canvasRef.current.getBoundingClientRect();
+    const p = e.touches ? e.touches[0] : e;
+    return { x: p.clientX - rect.left, y: p.clientY - rect.top };
+  };
+  const start = (e) => {
+    e.preventDefault();
+    drawing.current = true;
+    last.current = pos(e);
+  };
+  const move = (e) => {
+    if (!drawing.current) return;
+    e.preventDefault();
+    const ctx = canvasRef.current.getContext('2d');
+    const p = pos(e);
+    ctx.beginPath();
+    ctx.moveTo(last.current.x, last.current.y);
+    ctx.lineTo(p.x, p.y);
+    ctx.stroke();
+    last.current = p;
+    inked.current = true;
+  };
+  const end = () => {
+    if (!drawing.current) return;
+    drawing.current = false;
+    if (inked.current) onChange(canvasRef.current.toDataURL('image/png'));
+  };
+  const clear = () => {
+    const canvas = canvasRef.current;
+    canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
+    inked.current = false;
+    onChange(null);
+  };
+
+  return (
+    <div>
+      <canvas
+        ref={canvasRef}
+        style={{ width: '100%', height: 160, border: '1px dashed var(--border, #bbb)', borderRadius: 8, touchAction: 'none', background: '#fff', cursor: 'crosshair' }}
+        onMouseDown={start}
+        onMouseMove={move}
+        onMouseUp={end}
+        onMouseLeave={end}
+        onTouchStart={start}
+        onTouchMove={move}
+        onTouchEnd={end}
+      />
+      <div className="mt">
+        <button type="button" className="btn" onClick={clear}>
+          Clear
+        </button>
+      </div>
     </div>
   );
 }

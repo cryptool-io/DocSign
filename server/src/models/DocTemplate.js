@@ -24,6 +24,8 @@ module.exports = (sequelize, DataTypes) => {
       RequiresSignature: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
       SignerRoles: { type: DataTypes.JSONB, allowNull: false, defaultValue: [] },
       DefaultLinkSettings: { type: DataTypes.JSONB, allowNull: false, defaultValue: {} },
+      DefaultSubject: { type: DataTypes.STRING, allowNull: true },
+      DefaultMessage: { type: DataTypes.TEXT, allowNull: true },
       IsDefault: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
       ArchivedAt: { type: DataTypes.DATE, allowNull: true }
     },

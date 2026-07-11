@@ -97,6 +97,8 @@ exports.create = asyncHandler(async (req, res) => {
         RequiresSignature: body.requiresSignature || false,
         SignerRoles: body.signerRoles || [],
         DefaultLinkSettings: body.defaultLinkSettings || {},
+        DefaultSubject: body.defaultSubject || null,
+        DefaultMessage: body.defaultMessage || null,
         IsDefault: body.isDefault || false
       },
       { transaction: t }
@@ -124,6 +126,8 @@ exports.update = asyncHandler(async (req, res) => {
         RequiresSignature: body.requiresSignature ?? tpl.RequiresSignature,
         SignerRoles: body.signerRoles ?? tpl.SignerRoles,
         DefaultLinkSettings: body.defaultLinkSettings ?? tpl.DefaultLinkSettings,
+        DefaultSubject: body.defaultSubject === undefined ? tpl.DefaultSubject : body.defaultSubject || null,
+        DefaultMessage: body.defaultMessage === undefined ? tpl.DefaultMessage : body.defaultMessage || null,
         IsDefault: body.isDefault ?? tpl.IsDefault
       },
       { transaction: t }

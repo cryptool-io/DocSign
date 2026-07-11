@@ -89,7 +89,10 @@ export default function SendEnvelope() {
       );
     }
     if (tpl?.SourceDocumentId && !documentId) setDocumentId(tpl.SourceDocumentId);
-  }, [templateId]);
+    // Prefill the saved subject/message, but never clobber something typed.
+    if (tpl?.DefaultSubject && !subject) setSubject(tpl.DefaultSubject);
+    if (tpl?.DefaultMessage && !message) setMessage(tpl.DefaultMessage);
+  }, [templateId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Load the template's placed fields so the sender SEES them on the page (and
   // can tweak). Template fields are bound to signer ROLES; we resolve each to a
@@ -329,7 +332,9 @@ export default function SendEnvelope() {
   // sender doesn't have to place fields again next time.
   const saveAsTemplate = async () => {
     if (!documentId) return toast('Choose a document first.', 'err');
-    if (fields.length === 0) return toast('Place at least one field to save a template.', 'err');
+    if (fields.length === 0 && !subject.trim() && !message.trim()) {
+      return toast('Add fields or a message to save a setup.', 'err');
+    }
     const name = window.prompt('Name this template:', subject || 'Untitled template');
     if (!name) return;
     const makeDefault = window.confirm('Make this the default template for this workspace? (auto-selected next time)');
@@ -363,6 +368,8 @@ export default function SendEnvelope() {
         requiresSignature: tplFields.some((f) => f.type === 'signature' || f.type === 'initials'),
         signerRoles,
         fields: tplFields,
+        defaultSubject: subject || null,
+        defaultMessage: message || null,
         isDefault: makeDefault
       });
       const t = await api.get('/templates');
@@ -666,8 +673,13 @@ export default function SendEnvelope() {
       </div>
 
       <div className="card mb">
-        <h2>4 · Message</h2>
-        <div className="field">
+        <div className="flex between">
+          <h2 style={{ margin: 0 }}>4 · Message</h2>
+          <button className="btn sm" onClick={saveAsTemplate} disabled={sending || !documentId} title="Save the fields, signer roles, subject and message as a reusable setup on this document">
+            💾 Save as template
+          </button>
+        </div>
+        <div className="field mt">
           <label>Subject</label>
           <input
             className="input"

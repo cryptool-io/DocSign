@@ -95,6 +95,8 @@ const template = {
       )
       .default([]),
     defaultLinkSettings: Joi.object().default({}),
+    defaultSubject: Joi.string().max(300).allow('', null),
+    defaultMessage: Joi.string().max(5000).allow('', null),
     isDefault: Joi.boolean().default(false),
     fields: Joi.array().items(field).default([])
   }),
@@ -110,6 +112,8 @@ const template = {
       })
     ),
     defaultLinkSettings: Joi.object(),
+    defaultSubject: Joi.string().max(300).allow('', null),
+    defaultMessage: Joi.string().max(5000).allow('', null),
     isDefault: Joi.boolean(),
     fields: Joi.array().items(field)
   }).min(1)

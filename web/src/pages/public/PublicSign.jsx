@@ -32,12 +32,15 @@ export default function PublicSign() {
   // Is the signature ready? Typed needs a name; drawn needs ink on the canvas.
   const sigReady = sigMode === 'draw' ? !!drawn : !!typedName.trim();
   const initialsReady = initMode === 'draw' ? !!drawnInitials : !!typedInitials.trim();
-  const hasInitialsFields = fields.some((f) => f.type === 'initials');
+  // Only the CURRENT signer's fields (`mine`) drive the adopt controls; other
+  // signers' fields are shown read-only for context.
+  const hasSignatureFields = fields.some((f) => f.type === 'signature' && f.mine);
+  const hasInitialsFields = fields.some((f) => f.type === 'initials' && f.mine);
 
   // Required signature style set by the sender: 'draw' (must hand-draw), 'type'
   // (typed name only), or 'any'. Draw wins if fields disagree.
   const sigConstraint = fields
-    .filter((f) => f.type === 'signature')
+    .filter((f) => f.type === 'signature' && f.mine)
     .reduce((acc, f) => {
       const m = f.signatureMode || 'any';
       if (m === 'draw') return 'draw';
@@ -129,7 +132,7 @@ export default function PublicSign() {
       setValues((v) => {
         const next = { ...v };
         f.data.data.forEach((fld) => {
-          if (fld.type === 'date' && !next[fld.id]) next[fld.id] = today;
+          if (fld.mine && fld.type === 'date' && !next[fld.id]) next[fld.id] = today;
         });
         return next;
       });
@@ -146,8 +149,8 @@ export default function PublicSign() {
 
   const submit = async () => {
     if (!consent) return setError('Please agree to sign electronically.');
-    if (sigMode === 'draw' && !drawn) return setError('Please draw your signature, or switch to Type.');
-    if (sigMode === 'type' && !typedName.trim()) return setError('Please type your full name to use as your signature.');
+    if (hasSignatureFields && sigMode === 'draw' && !drawn) return setError('Please draw your signature, or switch to Type.');
+    if (hasSignatureFields && sigMode === 'type' && !typedName.trim()) return setError('Please type your full name to use as your signature.');
     if (hasInitialsFields && initMode === 'draw' && !drawnInitials) return setError('Please draw your initials, or switch to Type.');
     if (hasInitialsFields && initMode === 'type' && !typedInitials.trim()) return setError('Please enter your initials.');
     setBusy(true);
@@ -155,7 +158,7 @@ export default function PublicSign() {
     try {
       // Signature + initials come from the adopt controls; everything else
       // (date, text, checkbox) is sent as an explicit per-field value.
-      const valueFields = fields.filter((f) => !['signature', 'initials'].includes(f.type));
+      const valueFields = fields.filter((f) => f.mine && !['signature', 'initials'].includes(f.type));
       const payload = {
         consent: true,
         signatureType: sigMode === 'draw' ? 'drawn' : 'typed',
@@ -272,6 +275,8 @@ export default function PublicSign() {
       </div>
 
       <div className="card mb">
+        {hasSignatureFields && (
+        <>
         <div className="flex" style={{ gap: 8, marginBottom: 12 }}>
           {sigConstraint !== 'draw' && (
             <button
@@ -309,6 +314,8 @@ export default function PublicSign() {
             <label>Draw your signature below (use your mouse, trackpad, or finger)</label>
             <SignaturePad onChange={setDrawn} />
           </div>
+        )}
+        </>
         )}
 
         {hasInitialsFields && (
@@ -358,21 +365,27 @@ export default function PublicSign() {
                 {fields
                   .filter((f) => f.pageNumber === i + 1)
                   .map((f) => {
-                    const filled =
-                      f.type === 'signature'
-                        ? sigReady
-                        : f.type === 'initials'
-                        ? initialsReady
-                        : f.type === 'checkbox'
-                        ? values[f.id]
-                        : !!values[f.id];
+                    const filled = !f.mine
+                      ? !!f.value
+                      : f.type === 'signature'
+                      ? sigReady
+                      : f.type === 'initials'
+                      ? initialsReady
+                      : f.type === 'checkbox'
+                      ? values[f.id]
+                      : !!values[f.id];
                     return (
                       <div
                         key={f.id}
                         className={`sign-field ${filled ? 'done' : ''}`}
-                        style={{ left: `${f.x * 100}%`, top: `${f.y * 100}%`, width: `${f.width * 100}%`, height: `${f.height * 100}%` }}
+                        style={{ left: `${f.x * 100}%`, top: `${f.y * 100}%`, width: `${f.width * 100}%`, height: `${f.height * 100}%`, ...(f.mine ? {} : { cursor: 'default' }) }}
+                        title={f.mine ? undefined : f.byName ? `Filled by ${f.byName}` : 'Filled by another signer'}
                       >
-                        {f.type === 'signature' ? (
+                        {!f.mine ? (
+                          <span style={{ fontSize: 12, fontFamily: f.type === 'signature' || f.type === 'initials' ? 'cursive' : 'inherit', overflow: 'hidden', whiteSpace: 'nowrap' }}>
+                            {f.type === 'checkbox' ? (f.value ? '☑' : '') : f.value || ''}
+                          </span>
+                        ) : f.type === 'signature' ? (
                           sigMode === 'draw' && drawn ? (
                             <img src={drawn} alt="signature" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
                           ) : (

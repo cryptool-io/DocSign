@@ -255,29 +255,46 @@ const authorizeSigner = async (req) => {
   return { signer, env };
 };
 
-/** Authorized: the fields this signer must fill, plus a link to the PDF. */
+/**
+ * Authorized: ALL fields on the document. The current signer's are theirs to
+ * fill (`mine: true`); other signers' fields are shown read-only with whatever
+ * they've already entered, so a later signer sees the earlier signers' input.
+ */
 exports.fields = asyncHandler(async (req, res) => {
   const { signer, env } = await authorizeSigner(req);
   const fields = await DocSignatureField.findAll({
-    where: { DocEnvelopeId: env.id, DocEnvelopeSignerId: signer.id },
+    where: { DocEnvelopeId: env.id },
+    include: [{ model: DocEnvelopeSigner, as: 'Signer', attributes: ['id', 'Name', 'Status'] }],
     order: [['PageNumber', 'ASC']]
   });
   res.json({
-    data: fields.map((f) => ({
-      id: f.id,
-      type: f.Type,
-      pageNumber: f.PageNumber,
-      x: f.X,
-      y: f.Y,
-      width: f.Width,
-      height: f.Height,
-      required: f.Required,
-      autoFill: f.AutoFill,
-      signatureMode: f.SignatureMode || 'any',
-      fontSize: f.FontSize,
-      font: f.Font,
-      label: f.Label
-    }))
+    data: fields.map((f) => {
+      const mine = f.DocEnvelopeSignerId === signer.id;
+      // Represent a filled signature/initials for display (drawn images aren't
+      // inlined here; show the signer's name as the rendered value).
+      let value = f.Value;
+      if (!mine && (f.Type === 'signature' || f.Type === 'initials') && !value && f.Signer?.Status === 'signed') {
+        value = f.Signer?.Name || '✓';
+      }
+      return {
+        id: f.id,
+        type: f.Type,
+        pageNumber: f.PageNumber,
+        x: f.X,
+        y: f.Y,
+        width: f.Width,
+        height: f.Height,
+        required: f.Required,
+        autoFill: f.AutoFill,
+        signatureMode: f.SignatureMode || 'any',
+        fontSize: f.FontSize,
+        font: f.Font,
+        label: f.Label,
+        mine,
+        value: mine ? undefined : value || '',
+        byName: mine ? undefined : f.Signer?.Name || null
+      };
+    })
   });
 });
 

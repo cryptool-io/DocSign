@@ -56,7 +56,7 @@ export async function run() {
   // Signer 1
   ok((await api('GET', `/api/sign/${t1}/meta`, {})).json.data.yourTurn === true, "signer 1: it's their turn");
   const st1 = (await api('POST', `/api/sign/${t1}/start`, {})).json.data.signerToken;
-  ok((await api('GET', `/api/sign/${t1}/fields`, { token: st1 })).json.data.length === 1, 'signer 1 sees only their field');
+  ok((await api('GET', `/api/sign/${t1}/fields`, { token: st1 })).json.data.filter((f) => f.mine).length === 1, 'signer 1 has one field of their own to fill');
   ok((await api('POST', `/api/sign/${t1}/submit`, { token: st1, body: { consent: true, signatureType: 'typed', signatureData: 'Alice', documentKey: dekB64, values: [] } })).json.data.status === 'signed', 'signer 1 signs -> partially');
   ok((await api('GET', `/api/envelopes/${envelopeId}`, { token })).json.data.status === 'partially_signed', 'envelope partially_signed');
   ok((await api('GET', `/api/sign/${t2}/meta`, {})).json.data.yourTurn === true, 'signer 2 now active');

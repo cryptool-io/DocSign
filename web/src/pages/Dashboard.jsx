@@ -1,14 +1,18 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import api from '../lib/api.js';
+import { useCompany, companyParam } from '../lib/company.js';
 import { Spinner } from '../lib/ui.jsx';
 
 export default function Dashboard() {
   const [data, setData] = useState(null);
+  const activeId = useCompany((s) => s.activeId);
 
   useEffect(() => {
-    api.get('/analytics/overview').then((r) => setData(r.data.data)).catch(() => setData({}));
-  }, []);
+    setData(null);
+    const q = companyParam();
+    api.get(`/analytics/overview${q ? `?${q}` : ''}`).then((r) => setData(r.data.data)).catch(() => setData({}));
+  }, [activeId]);
 
   if (!data) return <Spinner center />;
 
@@ -17,7 +21,7 @@ export default function Dashboard() {
     { l: 'Share links', n: data.links ?? 0, to: '/documents' },
     { l: 'Total views', n: data.views?.total ?? 0, to: '/documents' },
     { l: 'Views (30d)', n: data.views?.last30Days ?? 0, to: '/documents' },
-    { l: 'Envelopes', n: data.envelopes?.total ?? 0, to: '/envelopes' },
+    { l: 'Signature requests', n: data.envelopes?.total ?? 0, to: '/envelopes' },
     { l: 'Awaiting signature', n: data.pendingSignatures ?? 0, to: '/envelopes' }
   ];
 

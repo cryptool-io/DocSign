@@ -89,6 +89,59 @@ export default function SendEnvelope() {
     if (tpl?.SourceDocumentId && !documentId) setDocumentId(tpl.SourceDocumentId);
   }, [templateId]);
 
+  // Load the template's placed fields so the sender SEES them on the page (and
+  // can tweak). Template fields are bound to signer ROLES; we resolve each to a
+  // signer email in the effect below as the signer rows get filled in.
+  useEffect(() => {
+    if (!templateId) return;
+    let dead = false;
+    api
+      .get(`/templates/${templateId}`)
+      .then(({ data }) => {
+        if (dead) return;
+        setFields(
+          (data.data.fields || []).map((f) => ({
+            _id: Math.random().toString(36).slice(2),
+            type: f.type,
+            signerRole: f.signerRole || null,
+            signerEmail: null,
+            pageNumber: f.pageNumber,
+            x: f.x,
+            y: f.y,
+            width: f.width,
+            height: f.height,
+            required: f.required !== false,
+            autoFill: f.autoFill === true,
+            label: f.label || ''
+          }))
+        );
+      })
+      .catch(() => {});
+    return () => {
+      dead = true;
+    };
+  }, [templateId]);
+
+  // Re-bind template fields (which carry a signerRole) to signer emails as the
+  // signer rows are filled in. Manual fields (no signerRole) are left alone.
+  useEffect(() => {
+    const roleToEmail = {};
+    signers.forEach((s) => {
+      if (s.signerRole && s.email) roleToEmail[s.signerRole] = s.email;
+    });
+    setFields((cur) => {
+      let changed = false;
+      const next = cur.map((f) => {
+        if (!f.signerRole) return f;
+        const email = roleToEmail[f.signerRole] || null;
+        if (email === f.signerEmail) return f;
+        changed = true;
+        return { ...f, signerEmail: email };
+      });
+      return changed ? next : cur;
+    });
+  }, [signers]);
+
   // Signers with a usable email drive the placement palette + color coding.
   const placeableSigners = signers.filter((s) => s.email);
   const colorByEmail = useMemo(() => {

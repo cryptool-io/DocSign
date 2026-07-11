@@ -38,8 +38,8 @@ export default function Envelopes() {
     <>
       <div className="page-head">
         <div>
-          <h1>Envelopes</h1>
-          <p className="muted">Documents out for signature.</p>
+          <h1>Pending signatures</h1>
+          <p className="muted">Documents you've sent out for signature.</p>
         </div>
         <Link className="btn primary" to="/send">
           + Send for signature

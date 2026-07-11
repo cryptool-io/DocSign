@@ -8,26 +8,36 @@ const {
   sequelize
 } = require('../models');
 const { asyncHandler } = require('../utils/http');
+const { listScope } = require('../utils/access');
 
-/** Dashboard summary across everything this user owns. */
+/**
+ * Dashboard summary. Respects the active workspace filter: with ?companyId set
+ * it counts only that workspace's records (owned or member); with ?companyId=none
+ * only personal (no-workspace) records; absent → everything owned + member.
+ */
 exports.overview = asyncHandler(async (req, res) => {
   const ownerId = req.userId;
-  const linkIdsRows = await DocLink.findAll({
-    attributes: ['id'],
-    where: { CreatedBy: ownerId },
-    raw: true
-  });
+  const docScope = { ...(await listScope(ownerId, req.query)), ArchivedAt: null };
+  const recScope = { ...(await listScope(ownerId, req.query)), ArchivedAt: null };
+  const envScope = await listScope(ownerId, req.query, 'CreatedBy');
+
+  // Links + views hang off documents, so scope them to this view's documents.
+  const docRows = await DocDocument.findAll({ attributes: ['id'], where: docScope, raw: true });
+  const docIds = docRows.map((d) => d.id);
+  const linkIdsRows = docIds.length
+    ? await DocLink.findAll({ attributes: ['id'], where: { DocDocumentId: { [Op.in]: docIds } }, raw: true })
+    : [];
   const linkIds = linkIdsRows.map((r) => r.id);
 
   const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
 
   const [documents, links, recipients, envByStatus, views, recentViews] = await Promise.all([
-    DocDocument.count({ where: { OwnerId: ownerId, ArchivedAt: null } }),
-    DocLink.count({ where: { CreatedBy: ownerId } }),
-    DocRecipient.count({ where: { OwnerId: ownerId, ArchivedAt: null } }),
+    docIds.length,
+    linkIds.length,
+    DocRecipient.count({ where: recScope }),
     DocEnvelope.findAll({
       attributes: ['Status', [sequelize.fn('COUNT', sequelize.col('id')), 'n']],
-      where: { CreatedBy: ownerId },
+      where: envScope,
       group: ['Status'],
       raw: true
     }),

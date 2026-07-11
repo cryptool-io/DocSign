@@ -73,6 +73,7 @@ exports.callback = asyncHandler(async (req, res) => {
   //     the signed-in Google/Microsoft account; otherwise the provider rewrites
   //     the From back to the account address.
   //  3) else create a row for the signed-in account email.
+  let fromAddress = tokens.email;
   await sequelize.transaction(async (t) => {
     const values = {
       Provider: provider,
@@ -84,6 +85,7 @@ exports.callback = asyncHandler(async (req, res) => {
     let target = await DocCompanyEmail.findOne({ where: { DocCompanyId: company.id, Email: tokens.email }, transaction: t });
     if (!target) target = await DocCompanyEmail.findOne({ where: { DocCompanyId: company.id, IsDefault: true }, transaction: t });
     if (target) {
+      fromAddress = target.Email;
       await target.update(values, { transaction: t });
     } else {
       const hasDefault = await DocCompanyEmail.count({ where: { DocCompanyId: company.id, IsDefault: true }, transaction: t });
@@ -93,6 +95,18 @@ exports.callback = asyncHandler(async (req, res) => {
       );
     }
   });
+
+  // If we're sending from an alias (different from the signed-in account), make
+  // sure it's registered as a "send mail as" on the account so the provider
+  // doesn't rewrite the From. Auto-verified for domain aliases; best-effort.
+  if (provider === 'google' && tokens.accessToken && fromAddress && fromAddress.toLowerCase() !== String(tokens.email).toLowerCase()) {
+    try {
+      const r = await oauth.ensureGoogleSendAs(tokens.accessToken, fromAddress, company.SenderName || company.Name);
+      console.log(`[docsign] sendAs ${fromAddress}: ${JSON.stringify(r)}`);
+    } catch (e) {
+      console.warn(`[docsign] sendAs setup failed for ${fromAddress}: ${e.message}`);
+    }
+  }
 
   return back('success');
 });

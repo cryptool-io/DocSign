@@ -22,8 +22,10 @@ const PROVIDERS = {
     clientSecret: () => process.env.GOOGLE_CLIENT_SECRET,
     authUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
     tokenUrl: 'https://oauth2.googleapis.com/token',
-    // gmail.send to send; openid+email to learn which address was connected.
-    scope: 'openid email https://www.googleapis.com/auth/gmail.send',
+    // gmail.send to send; openid+email to learn which address; settings.basic to
+    // auto-register the workspace's from-address as a "send mail as" alias so you
+    // can sign in as micky@ and send from hello@ (an alias of the same account).
+    scope: 'openid email https://www.googleapis.com/auth/gmail.send https://www.googleapis.com/auth/gmail.settings.basic',
     authExtra: { access_type: 'offline', prompt: 'consent' }
   },
   microsoft: {
@@ -97,6 +99,29 @@ const exchangeCode = async (provider, code) => {
     scope: tokens.scope || p.scope,
     email: tokens.id_token ? emailFromIdToken(tokens.id_token) : null
   };
+};
+
+/**
+ * Register `sendAsEmail` as a "send mail as" address on the connected Google
+ * account, so mail can go out FROM it (e.g. hello@ while signed in as micky@).
+ * For an alias of the same account/domain this is auto-verified (no code). No-op
+ * if already present. Needs the gmail.settings.basic scope. Best-effort.
+ */
+const ensureGoogleSendAs = async (accessToken, sendAsEmail, displayName) => {
+  const base = 'https://gmail.googleapis.com/gmail/v1/users/me/settings/sendAs';
+  const listRes = await fetch(base, { headers: { Authorization: `Bearer ${accessToken}` } });
+  if (!listRes.ok) throw new Error(`sendAs list failed: ${(await listRes.text()).slice(0, 200)}`);
+  const list = await listRes.json();
+  const found = (list.sendAs || []).find((s) => (s.sendAsEmail || '').toLowerCase() === sendAsEmail.toLowerCase());
+  if (found) return { existed: true, verificationStatus: found.verificationStatus || 'accepted' };
+  const createRes = await fetch(base, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ sendAsEmail, displayName: displayName || undefined, treatAsAlias: true })
+  });
+  if (!createRes.ok) throw new Error(`sendAs create failed: ${(await createRes.text()).slice(0, 200)}`);
+  const created = await createRes.json();
+  return { existed: false, verificationStatus: created.verificationStatus };
 };
 
 /** Trade a stored refresh token for a fresh access token. */
@@ -184,6 +209,7 @@ module.exports = {
   readState,
   exchangeCode,
   refreshAccessToken,
+  ensureGoogleSendAs,
   buildRawMime,
   sendViaGoogle,
   sendViaMicrosoft,

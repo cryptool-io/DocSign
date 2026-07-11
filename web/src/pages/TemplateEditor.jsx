@@ -189,8 +189,8 @@ export default function TemplateEditor() {
       };
       if (id) await api.patch(`/templates/${id}`, payload);
       else await api.post('/templates', withCompany(payload));
-      toast('Template saved');
-      nav('/templates');
+      toast('Signing setup saved');
+      nav('/documents');
     } catch (err) {
       toast(apiError(err), 'err');
     } finally {
@@ -205,12 +205,12 @@ export default function TemplateEditor() {
     <>
       <div className="page-head">
         <div>
-          <h1>{id ? 'Edit template' : 'New template'}</h1>
-          <p className="muted">Define the signers, then place each signer's fields on the document.</p>
+          <h1>{id ? 'Edit signing fields' : 'Set up signing fields'}</h1>
+          <p className="muted">Define the signers, then place each signer's fields on the document. This saves as a reusable setup for the document.</p>
         </div>
         <div className="wrap-actions">
-          <button className="btn" onClick={() => nav('/templates')}>Cancel</button>
-          <button className="btn primary" disabled={saving} onClick={save}>{saving ? 'Saving…' : 'Save template'}</button>
+          <button className="btn" onClick={() => nav('/documents')}>Cancel</button>
+          <button className="btn primary" disabled={saving} onClick={save}>{saving ? 'Saving…' : 'Save signing fields'}</button>
         </div>
       </div>
 

@@ -10,7 +10,6 @@ const links = [
   { to: '/envelopes', label: 'Pending signatures' },
   { to: '/inbox', label: 'To sign' },
   { to: '/data-rooms', label: 'Data rooms' },
-  { to: '/templates', label: 'Templates' },
   { to: '/recipients', label: 'Recipients' },
   { to: '/workspaces', label: 'Workspaces' },
   { to: '/settings', label: 'Settings' }

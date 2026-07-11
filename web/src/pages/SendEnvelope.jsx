@@ -466,7 +466,7 @@ export default function SendEnvelope() {
             </select>
           </div>
           <div className="field">
-            <label>Template (optional)</label>
+            <label>Saved signing setup (optional)</label>
             <select
               className="select"
               value={templateId}

@@ -126,6 +126,7 @@ function LinkModal({ doc, onClose }) {
 export default function Documents() {
   const [items, setItems] = useState(null);
   const [links, setLinks] = useState([]);
+  const [templates, setTemplates] = useState([]);
   const [linkDoc, setLinkDoc] = useState(null);
   const [uploading, setUploading] = useState(false);
   const fileRef = useRef();
@@ -135,12 +136,14 @@ export default function Documents() {
 
   const load = async () => {
     const q = companyParam();
-    const [d, l] = await Promise.all([
+    const [d, l, t] = await Promise.all([
       api.get(`/documents${q ? `?${q}` : ''}`),
-      api.get(`/links${q ? `?${q}` : ''}`)
+      api.get(`/links${q ? `?${q}` : ''}`),
+      api.get(`/templates${q ? `?${q}` : ''}`)
     ]);
     setItems(d.data.data);
     setLinks(l.data.data);
+    setTemplates(t.data.data);
   };
   useEffect(() => {
     load();
@@ -185,13 +188,17 @@ export default function Documents() {
     (m[l.DocDocumentId] = m[l.DocDocumentId] || []).push(l);
     return m;
   }, {});
+  const templatesByDoc = templates.reduce((m, t) => {
+    if (t.SourceDocumentId) (m[t.SourceDocumentId] = m[t.SourceDocumentId] || []).push(t);
+    return m;
+  }, {});
 
   return (
     <>
       <div className="page-head">
         <div>
           <h1>Documents</h1>
-          <p className="muted">Upload PDFs, share tracked links, and send for signature.</p>
+          <p className="muted">Upload PDFs, set up reusable signing fields, share tracked links, and send for signature.</p>
         </div>
         <div>
           <input
@@ -215,7 +222,7 @@ export default function Documents() {
             <thead>
               <tr>
                 <th>Document</th>
-                <th>Pages</th>
+                <th>Signing fields</th>
                 <th>Links</th>
                 <th>Uploaded</th>
                 <th />
@@ -225,13 +232,31 @@ export default function Documents() {
               {items.map((d) => {
                 const dl = linksByDoc[d.id] || [];
                 const views = dl.reduce((a, l) => a + (l.views || 0), 0);
+                const tpls = templatesByDoc[d.id] || [];
                 return (
                   <tr key={d.id}>
                     <td>
                       <strong>{d.Name}</strong>
-                      <div className="muted">{(d.SizeBytes / 1024).toFixed(0)} KB</div>
+                      <div className="muted">{(d.SizeBytes / 1024).toFixed(0)} KB · {d.PageCount} pages</div>
                     </td>
-                    <td>{d.PageCount}</td>
+                    <td>
+                      {tpls.length ? (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                          {tpls.map((t) => (
+                            <button
+                              key={t.id}
+                              className="btn sm"
+                              title="Edit this signing setup"
+                              onClick={() => nav(`/templates/${t.id}`)}
+                            >
+                              {t.Name}{t.IsDefault ? ' ★' : ''}
+                            </button>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="muted">not set up</span>
+                      )}
+                    </td>
                     <td>
                       {dl.length ? (
                         <span>
@@ -244,10 +269,7 @@ export default function Documents() {
                     <td className="muted">{fmtDate(d.createdAt)}</td>
                     <td style={{ textAlign: 'right' }}>
                       <div className="wrap-actions" style={{ justifyContent: 'flex-end' }}>
-                        <button className="btn sm primary" onClick={() => setLinkDoc(d)}>
-                          Share link
-                        </button>
-                        <button className="btn sm" onClick={() => nav('/send', { state: { documentId: d.id } })}>
+                        <button className="btn sm primary" onClick={() => nav('/send', { state: { documentId: d.id } })}>
                           Send to sign
                         </button>
                         <button
@@ -255,7 +277,10 @@ export default function Documents() {
                           title="Place reusable signature fields on this document"
                           onClick={() => nav(`/templates/new?documentId=${d.id}`)}
                         >
-                          Prepare fields
+                          {tpls.length ? '+ Add signing fields' : 'Set up signing fields'}
+                        </button>
+                        <button className="btn sm" onClick={() => setLinkDoc(d)}>
+                          Share link
                         </button>
                         {dl[0] && (
                           <button className="btn sm" onClick={() => nav(`/links/${dl[0].id}`)}>

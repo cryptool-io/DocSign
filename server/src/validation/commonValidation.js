@@ -32,6 +32,7 @@ const recipient = {
     company: Joi.string().max(160).allow('', null),
     title: Joi.string().max(160).allow('', null),
     projectId: uuid.allow(null),
+    companyId: uuid.allow(null),
     favorite: Joi.boolean()
   }).min(1)
 };
@@ -94,6 +95,7 @@ const template = {
       )
       .default([]),
     defaultLinkSettings: Joi.object().default({}),
+    isDefault: Joi.boolean().default(false),
     fields: Joi.array().items(field).default([])
   }),
   update: Joi.object({
@@ -108,6 +110,7 @@ const template = {
       })
     ),
     defaultLinkSettings: Joi.object(),
+    isDefault: Joi.boolean(),
     fields: Joi.array().items(field)
   }).min(1)
 };

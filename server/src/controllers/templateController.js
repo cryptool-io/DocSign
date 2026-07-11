@@ -1,7 +1,25 @@
 const { DocTemplate, DocSignatureField, DocDocument, sequelize } = require('../models');
+const { Op } = require('sequelize');
 const { asyncHandler, notFound, badRequest } = require('../utils/http');
 const { resolveCompanyId } = require('../utils/companyScope');
 const { listScope, canAccessRecord } = require('../utils/access');
+
+// A workspace (or the personal space) has at most one default template. When one
+// is marked default, clear the flag on its siblings.
+const clearOtherDefaults = async (ownerId, companyId, keepId, t) => {
+  await DocTemplate.update(
+    { IsDefault: false },
+    {
+      where: {
+        OwnerId: ownerId,
+        DocCompanyId: companyId || null,
+        id: { [Op.ne]: keepId },
+        IsDefault: true
+      },
+      transaction: t
+    }
+  );
+};
 
 const serialize = (tpl) => ({
   ...tpl.toJSON(),
@@ -66,24 +84,27 @@ exports.create = asyncHandler(async (req, res) => {
     if (!doc || !(await canAccessRecord(req.userId, doc))) throw badRequest('Source document not found.', 'bad_document');
   }
 
+  const companyId = await resolveCompanyId(req.userId, body.companyId);
   const tpl = await sequelize.transaction(async (t) => {
     const created = await DocTemplate.create(
       {
         OwnerId: req.userId,
         DocProjectId: body.projectId || null,
-        DocCompanyId: await resolveCompanyId(req.userId, body.companyId),
+        DocCompanyId: companyId,
         SourceDocumentId: body.sourceDocumentId || null,
         Name: body.name,
         Description: body.description || null,
         RequiresSignature: body.requiresSignature || false,
         SignerRoles: body.signerRoles || [],
-        DefaultLinkSettings: body.defaultLinkSettings || {}
+        DefaultLinkSettings: body.defaultLinkSettings || {},
+        IsDefault: body.isDefault || false
       },
       { transaction: t }
     );
     if (body.fields?.length) {
       await DocSignatureField.bulkCreate(fieldRows(created.id, body.fields), { transaction: t });
     }
+    if (created.IsDefault) await clearOtherDefaults(req.userId, companyId, created.id, t);
     return created;
   });
 
@@ -102,7 +123,8 @@ exports.update = asyncHandler(async (req, res) => {
         Description: body.description === undefined ? tpl.Description : body.description,
         RequiresSignature: body.requiresSignature ?? tpl.RequiresSignature,
         SignerRoles: body.signerRoles ?? tpl.SignerRoles,
-        DefaultLinkSettings: body.defaultLinkSettings ?? tpl.DefaultLinkSettings
+        DefaultLinkSettings: body.defaultLinkSettings ?? tpl.DefaultLinkSettings,
+        IsDefault: body.isDefault ?? tpl.IsDefault
       },
       { transaction: t }
     );
@@ -112,6 +134,7 @@ exports.update = asyncHandler(async (req, res) => {
         await DocSignatureField.bulkCreate(fieldRows(tpl.id, body.fields), { transaction: t });
       }
     }
+    if (tpl.IsDefault) await clearOtherDefaults(tpl.OwnerId, tpl.DocCompanyId, tpl.id, t);
   });
 
   res.json({ data: serialize(await withFields(tpl.id, req.userId)) });

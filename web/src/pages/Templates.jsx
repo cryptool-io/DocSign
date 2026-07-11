@@ -23,6 +23,11 @@ export default function Templates() {
     load();
   };
 
+  const toggleDefault = async (t) => {
+    await api.patch(`/templates/${t.id}`, { isDefault: !t.IsDefault });
+    load();
+  };
+
   if (!items) return <Spinner center />;
 
   return (
@@ -56,12 +61,16 @@ export default function Templates() {
                 <tr key={t.id} style={{ cursor: 'pointer' }} onClick={() => nav(`/templates/${t.id}`)}>
                   <td>
                     <strong>{t.Name}</strong>
+                    {t.IsDefault && <span className="badge blue" style={{ marginLeft: 8 }}>default</span>}
                     <div className="muted">{t.Description}</div>
                   </td>
                   <td>{t.RequiresSignature ? <Badge status="signed" /> : <span className="muted">—</span>}</td>
                   <td>{(t.SignerRoles || []).map((r) => r.label).join(', ') || '—'}</td>
                   <td className="muted">{fmtDate(t.updatedAt)}</td>
-                  <td style={{ textAlign: 'right' }} onClick={(e) => e.stopPropagation()}>
+                  <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }} onClick={(e) => e.stopPropagation()}>
+                    <button className="btn sm" onClick={() => toggleDefault(t)} title="Auto-select this template when sending">
+                      {t.IsDefault ? 'Unset default' : 'Make default'}
+                    </button>{' '}
                     <button className="btn sm danger" onClick={() => remove(t.id)}>
                       Archive
                     </button>

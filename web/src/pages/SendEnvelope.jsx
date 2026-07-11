@@ -28,6 +28,7 @@ export default function SendEnvelope() {
   const user = useAuth((s) => s.user);
   const [documentId, setDocumentId] = useState(loc.state?.documentId || '');
   const [templateId, setTemplateId] = useState('');
+  const [tplTouched, setTplTouched] = useState(false); // did the user pick a template themselves?
   const [companyId, setCompanyId] = useState(activeId || '');
   const [fromEmail, setFromEmail] = useState('');
   const [deliveryMode, setDeliveryMode] = useState('email');
@@ -60,6 +61,16 @@ export default function SendEnvelope() {
       setLoading(false);
     })();
   }, []);
+
+  // Auto-select the workspace's default template until the user picks one. This
+  // is the "show default template" behavior — its field layout loads on open.
+  const defaultTemplate = templates.find(
+    (x) => x.IsDefault && (companyId ? x.DocCompanyId === companyId : !x.DocCompanyId)
+  );
+  useEffect(() => {
+    if (tplTouched) return;
+    setTemplateId(defaultTemplate ? defaultTemplate.id : '');
+  }, [templates, companyId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // When a template is chosen, prefill its signer roles as blank signer rows.
   useEffect(() => {
@@ -221,6 +232,56 @@ export default function SendEnvelope() {
     }
   };
 
+  // Save the current field layout + signer roles as a reusable template, so the
+  // sender doesn't have to place fields again next time.
+  const saveAsTemplate = async () => {
+    if (!documentId) return toast('Choose a document first.', 'err');
+    if (fields.length === 0) return toast('Place at least one field to save a template.', 'err');
+    const name = window.prompt('Name this template:', subject || 'Untitled template');
+    if (!name) return;
+    const makeDefault = window.confirm('Make this the default template for this workspace? (auto-selected next time)');
+    // Map each placed field (bound to a signer email) onto a signer ROLE.
+    const roleByEmail = {};
+    const signerRoles = placeableSigners.map((s, i) => {
+      const key = (s.signerRole && s.signerRole.trim()) || `signer${i + 1}`;
+      roleByEmail[s.email] = key;
+      return { key, label: s.name || s.signerRole || `Signer ${i + 1}`, order: i + 1 };
+    });
+    const tplFields = fields
+      .filter((f) => roleByEmail[f.signerEmail])
+      .map((f) => ({
+        type: f.type,
+        signerRole: roleByEmail[f.signerEmail],
+        pageNumber: f.pageNumber,
+        x: f.x,
+        y: f.y,
+        width: f.width,
+        height: f.height,
+        required: f.required !== false,
+        autoFill: f.type === 'date' ? f.autoFill === true : false,
+        label: f.label || null
+      }));
+    setSending(true);
+    try {
+      await api.post('/templates', {
+        name,
+        companyId: companyId || null,
+        sourceDocumentId: documentId,
+        requiresSignature: tplFields.some((f) => f.type === 'signature' || f.type === 'initials'),
+        signerRoles,
+        fields: tplFields,
+        isDefault: makeDefault
+      });
+      const t = await api.get('/templates');
+      setTemplates(t.data.data); // refresh the dropdown (don't select it — keep current signers/fields)
+      toast(makeDefault ? 'Template saved as default' : 'Template saved');
+    } catch (err) {
+      toast(apiError(err), 'err');
+    } finally {
+      setSending(false);
+    }
+  };
+
   // Send the exact same request to yourself so you can see how it looks and
   // confirm delivery (and, for a connected mailbox, the From address). Every
   // placed field is remapped to you so the signing page renders them.
@@ -353,11 +414,18 @@ export default function SendEnvelope() {
           </div>
           <div className="field">
             <label>Template (optional)</label>
-            <select className="select" value={templateId} onChange={(e) => setTemplateId(e.target.value)}>
+            <select
+              className="select"
+              value={templateId}
+              onChange={(e) => {
+                setTplTouched(true);
+                setTemplateId(e.target.value);
+              }}
+            >
               <option value="">No template</option>
               {templates.map((t) => (
                 <option key={t.id} value={t.id}>
-                  {t.Name}
+                  {t.Name}{t.IsDefault ? ' (default)' : ''}
                 </option>
               ))}
             </select>
@@ -436,11 +504,18 @@ export default function SendEnvelope() {
               Pick a signer and a field type, then click on the page to drop it. Drag to reposition.
             </p>
           </div>
-          {fields.length > 0 && (
-            <button className="btn sm" onClick={() => setFields([])}>
-              Clear all
-            </button>
-          )}
+          <div className="flex" style={{ gap: 8 }}>
+            {fields.length > 0 && (
+              <button className="btn sm" onClick={saveAsTemplate} disabled={sending}>
+                💾 Save as template
+              </button>
+            )}
+            {fields.length > 0 && (
+              <button className="btn sm" onClick={() => setFields([])}>
+                Clear all
+              </button>
+            )}
+          </div>
         </div>
 
         {placeableSigners.length === 0 ? (

@@ -50,13 +50,14 @@ const findOwned = async (req) => {
 
 exports.update = asyncHandler(async (req, res) => {
   const recipient = await findOwned(req);
-  const { name, email, company, title, projectId, favorite } = req.body;
+  const { name, email, company, title, projectId, companyId, favorite } = req.body;
   await recipient.update({
     Name: name ?? recipient.Name,
     Email: email ?? recipient.Email,
     Company: company === undefined ? recipient.Company : company,
     Title: title === undefined ? recipient.Title : title,
     DocProjectId: projectId === undefined ? recipient.DocProjectId : projectId,
+    DocCompanyId: companyId === undefined ? recipient.DocCompanyId : await resolveCompanyId(req.userId, companyId),
     Favorite: favorite === undefined ? recipient.Favorite : favorite
   });
   res.json({ data: recipient });

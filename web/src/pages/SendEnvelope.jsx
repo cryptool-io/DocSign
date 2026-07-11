@@ -83,7 +83,8 @@ export default function SendEnvelope() {
         tpl.SignerRoles.sort((a, b) => a.order - b.order).map((r, i) => ({
           name: '',
           email: '',
-          signerRole: r.label || r.key, // show the friendly label, not the internal key
+          roleKey: r.key, // immutable binding key (fields carry the same key)
+          signerRole: r.label || r.key, // editable display label
           signingOrder: i + 1
         }))
       );
@@ -104,17 +105,13 @@ export default function SendEnvelope() {
       .get(`/templates/${templateId}`)
       .then(({ data }) => {
         if (dead) return;
-        // Map each field's role KEY to its human label so it matches the signer
-        // rows (which are prefilled with labels) when we bind emails.
-        const keyToLabel = {};
-        (data.data.SignerRoles || []).forEach((r) => {
-          keyToLabel[r.key] = r.label || r.key;
-        });
         setFields(
           (data.data.fields || []).map((f) => ({
             _id: Math.random().toString(36).slice(2),
             type: f.type,
-            signerRole: f.signerRole ? keyToLabel[f.signerRole] || f.signerRole : null,
+            // Keep the role KEY for binding (matches the signer rows' roleKey),
+            // independent of any editable label text.
+            signerRole: f.signerRole || null,
             signerEmail: null,
             pageNumber: f.pageNumber,
             x: f.x,
@@ -136,12 +133,14 @@ export default function SendEnvelope() {
     };
   }, [templateId]);
 
-  // Re-bind template fields (which carry a signerRole) to signer emails as the
-  // signer rows are filled in. Manual fields (no signerRole) are left alone.
+  // Re-bind template fields (which carry a role KEY) to signer emails as the
+  // signer rows are filled in — matched on the immutable roleKey, so editing a
+  // signer's name or role label never mis-routes fields. Manual fields (no
+  // signerRole) are left alone.
   useEffect(() => {
     const roleToEmail = {};
     signers.forEach((s) => {
-      if (s.signerRole && s.email) roleToEmail[s.signerRole] = s.email;
+      if (s.roleKey && s.email) roleToEmail[s.roleKey] = s.email;
     });
     setFields((cur) => {
       let changed = false;
@@ -155,6 +154,13 @@ export default function SendEnvelope() {
       return changed ? next : cur;
     });
   }, [signers]);
+
+  // How many placed fields each signer will fill — so it's obvious if someone
+  // (e.g. a 2nd signer) ended up with none.
+  const fieldsByEmail = fields.reduce((m, f) => {
+    if (f.signerEmail) m[f.signerEmail] = (m[f.signerEmail] || 0) + 1;
+    return m;
+  }, {});
 
   // Signers with a usable email drive the placement palette + color coding.
   const placeableSigners = signers.filter((s) => s.email);
@@ -581,6 +587,18 @@ export default function SendEnvelope() {
               <div className="field" style={{ marginBottom: 0, flex: 0.7 }}>
                 {i === 0 && <label>Role</label>}
                 <input className="input" value={s.signerRole} onChange={(e) => setSigner(i, 'signerRole', e.target.value)} placeholder="e.g. investor" />
+              </div>
+              <div className="field" style={{ marginBottom: 0, flex: 0.45 }}>
+                {i === 0 && <label>Fields</label>}
+                <div style={{ minHeight: 38, display: 'flex', alignItems: 'center' }} title="How many fields this person signs">
+                  {s.email ? (
+                    <span className={`badge ${(fieldsByEmail[s.email] || 0) > 0 ? 'green' : 'amber'}`}>
+                      {fieldsByEmail[s.email] || 0} field{(fieldsByEmail[s.email] || 0) === 1 ? '' : 's'}
+                    </span>
+                  ) : (
+                    <span className="muted">—</span>
+                  )}
+                </div>
               </div>
               {order === 'sequential' && (
                 <div className="field" style={{ marginBottom: 0, flex: 0.4 }}>

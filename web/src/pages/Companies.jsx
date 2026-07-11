@@ -130,6 +130,23 @@ function CompanyCard({ company, providers, onChanged }) {
     }
   };
 
+  const [newEmail, setNewEmail] = useState('');
+  const addEmail = async (e) => {
+    e.preventDefault();
+    if (!newEmail.trim()) return;
+    setBusy(true);
+    try {
+      await api.post(`/companies/${company.id}/emails`, { email: newEmail.trim().toLowerCase() });
+      setNewEmail('');
+      toast('Address added — you can now choose it as a from-address when sending.');
+      onChanged();
+    } catch (err) {
+      toast(apiError(err), 'err');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const removeEmail = async (id) => {
     await api.delete(`/companies/${company.id}/emails/${id}`);
     onChanged();
@@ -293,6 +310,21 @@ function CompanyCard({ company, providers, onChanged }) {
           ))}
         </tbody>
       </table>
+
+      <form className="flex" style={{ gap: 8, marginBottom: 6 }} onSubmit={addEmail}>
+        <input
+          className="input"
+          type="email"
+          value={newEmail}
+          onChange={(e) => setNewEmail(e.target.value)}
+          placeholder="alias@yourdomain.com"
+          style={{ maxWidth: 280 }}
+        />
+        <button className="btn" disabled={busy}>+ Add address / alias</button>
+      </form>
+      <p className="muted" style={{ fontSize: 12, marginBottom: 10 }}>
+        Add an alias or extra address (e.g. <code>hello@…</code>, <code>micky@…</code>). It sends through this workspace’s connected mailbox — so you don’t connect it separately. For a Gmail alias to actually show as the From, it also has to be a “Send mail as” address in that mailbox.
+      </p>
 
       <div className="wrap-actions">
         <button className="btn primary" disabled={busy} onClick={() => setShowSmtp((v) => !v)}>

@@ -83,7 +83,7 @@ export default function SendEnvelope() {
         tpl.SignerRoles.sort((a, b) => a.order - b.order).map((r, i) => ({
           name: '',
           email: '',
-          signerRole: r.key,
+          signerRole: r.label || r.key, // show the friendly label, not the internal key
           signingOrder: i + 1
         }))
       );
@@ -101,11 +101,17 @@ export default function SendEnvelope() {
       .get(`/templates/${templateId}`)
       .then(({ data }) => {
         if (dead) return;
+        // Map each field's role KEY to its human label so it matches the signer
+        // rows (which are prefilled with labels) when we bind emails.
+        const keyToLabel = {};
+        (data.data.SignerRoles || []).forEach((r) => {
+          keyToLabel[r.key] = r.label || r.key;
+        });
         setFields(
           (data.data.fields || []).map((f) => ({
             _id: Math.random().toString(36).slice(2),
             type: f.type,
-            signerRole: f.signerRole || null,
+            signerRole: f.signerRole ? keyToLabel[f.signerRole] || f.signerRole : null,
             signerEmail: null,
             pageNumber: f.pageNumber,
             x: f.x,

@@ -1,8 +1,14 @@
+const fs = require('fs');
+const path = require('path');
 const { DocCompany, DocCompanyEmail, sequelize } = require('../models');
 const { asyncHandler, notFound, badRequest, conflict } = require('../utils/http');
 const { slugify } = require('../utils/misc');
 const { systemCanSendFrom, SYSTEM_DOMAIN, verifySmtp } = require('../services/email');
 const { encryptSecret } = require('../services/secretStore');
+
+const LOGO_DIR = path.resolve(__dirname, '../../storage/logos');
+const APP_BASE_URL = (process.env.APP_BASE_URL || '').replace(/\/+$/, '');
+const LOGO_EXT = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp', 'image/gif': 'gif' };
 
 const serialize = (company) => ({
   id: company.id,
@@ -156,6 +162,25 @@ exports.setDefaultEmail = asyncHandler(async (req, res) => {
     await DocCompanyEmail.update({ IsDefault: false }, { where: { DocCompanyId: company.id }, transaction: t });
     await email.update({ IsDefault: true }, { transaction: t });
   });
+  res.json({ data: serialize(await withEmails(company.id, req.userId)) });
+});
+
+/**
+ * Upload a workspace logo for email branding. The browser has already resized
+ * the image to email dimensions; we just validate, store it under the public
+ * /logos dir, and point the workspace's LogoUrl at it.
+ */
+exports.uploadLogo = asyncHandler(async (req, res) => {
+  const company = await withEmails(req.params.id, req.userId);
+  if (!company) throw notFound('Company not found');
+  if (!req.file) throw badRequest('No image uploaded (send it as multipart field "logo").', 'no_file');
+  const ext = LOGO_EXT[req.file.mimetype];
+  if (!ext) throw badRequest('Logo must be a PNG, JPG, WEBP or GIF image.', 'bad_type');
+
+  fs.mkdirSync(LOGO_DIR, { recursive: true });
+  const fname = `${company.id}-${Date.now()}.${ext}`;
+  fs.writeFileSync(path.join(LOGO_DIR, fname), req.file.buffer);
+  await company.update({ LogoUrl: `${APP_BASE_URL}/logos/${fname}` });
   res.json({ data: serialize(await withEmails(company.id, req.userId)) });
 });
 

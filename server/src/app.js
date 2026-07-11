@@ -79,6 +79,17 @@ app.use('/api/view', require('./routes/publicViewRoutes'));
 app.use('/api/sign', require('./routes/publicSignRoutes'));
 app.use('/api/room', require('./routes/publicDataRoomRoutes'));
 
+// --- Public workspace logos (email branding; no auth, non-sensitive) ------
+// Lives outside the git tree (server/storage) so it survives redeploys, and is
+// served before the SPA fallback so /logos/* isn't swallowed by index.html.
+const logosDir = path.resolve(__dirname, '../storage/logos');
+try {
+  fs.mkdirSync(logosDir, { recursive: true });
+} catch {
+  /* ignore */
+}
+app.use('/logos', express.static(logosDir, { maxAge: '7d', fallthrough: false }));
+
 // --- Static SPA (built web/) ---------------------------------------------
 const webDist = path.resolve(__dirname, '../../web/dist');
 if (fs.existsSync(webDist)) {

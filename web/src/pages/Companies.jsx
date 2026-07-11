@@ -1,8 +1,33 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import api, { apiError } from '../lib/api.js';
 import { useCompany } from '../lib/company.js';
 import { Spinner, useToast } from '../lib/ui.jsx';
+
+// Resize an image file to fit email-header dimensions and return a PNG Blob.
+// Rasterizing to PNG also fixes email clients that block SVG logos.
+function resizeToPngBlob(file, maxW = 480, maxH = 140) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const scale = Math.min(maxW / img.width, maxH / img.height, 1);
+        const w = Math.max(1, Math.round(img.width * scale));
+        const h = Math.max(1, Math.round(img.height * scale));
+        const canvas = document.createElement('canvas');
+        canvas.width = w;
+        canvas.height = h;
+        canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+        canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('Could not process image'))), 'image/png');
+      };
+      img.onerror = () => reject(new Error('That file is not a valid image'));
+      img.src = reader.result;
+    };
+    reader.onerror = () => reject(new Error('Could not read the file'));
+    reader.readAsDataURL(file);
+  });
+}
 
 const SMTP_PRESETS = {
   gmail: { label: 'Gmail / Google Workspace', host: 'smtp.gmail.com', port: 465, secure: true, hint: 'Requires 2-Step Verification, then an App Password (myaccount.google.com → Security → App passwords).' },
@@ -16,6 +41,25 @@ function CompanyCard({ company, providers, onChanged }) {
   const [showSmtp, setShowSmtp] = useState(false);
   const [smtp, setSmtp] = useState({ preset: 'gmail', email: '', host: 'smtp.gmail.com', port: 465, secure: true, username: '', password: '' });
   const [brand, setBrand] = useState({ senderName: company.senderName || '', logoUrl: company.logoUrl || '' });
+  const logoInputRef = useRef(null);
+
+  const uploadLogo = async (file) => {
+    if (!file) return;
+    setBusy(true);
+    try {
+      const blob = await resizeToPngBlob(file);
+      const fd = new FormData();
+      fd.append('logo', blob, 'logo.png');
+      const { data } = await api.post(`/companies/${company.id}/logo`, fd);
+      setBrand((b) => ({ ...b, logoUrl: data.data.logoUrl || '' }));
+      toast('Logo uploaded — it will appear in this workspace’s emails.');
+      onChanged();
+    } catch (err) {
+      toast(apiError(err) || err.message || 'Could not upload logo', 'err');
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const saveBrand = async (e) => {
     e.preventDefault();
@@ -115,12 +159,22 @@ function CompanyCard({ company, providers, onChanged }) {
             <input className="input" value={brand.senderName} onChange={(e) => setBrand((b) => ({ ...b, senderName: e.target.value }))} placeholder={company.name} />
           </div>
           <div className="field" style={{ marginBottom: 0, flex: 1.4 }}>
-            <label>Logo image URL</label>
+            <label>Logo — upload or paste a URL</label>
             <input className="input" value={brand.logoUrl} onChange={(e) => setBrand((b) => ({ ...b, logoUrl: e.target.value }))} placeholder="https://yoursite.com/logo.png" />
           </div>
           {brand.logoUrl && (
             <img src={brand.logoUrl} alt="logo preview" style={{ maxHeight: 40, maxWidth: 120, objectFit: 'contain', border: '1px solid #eee', borderRadius: 4, padding: 2 }} />
           )}
+          <input
+            ref={logoInputRef}
+            type="file"
+            accept="image/png,image/jpeg,image/webp,image/gif,image/svg+xml"
+            style={{ display: 'none' }}
+            onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; uploadLogo(f); }}
+          />
+          <button type="button" className="btn" disabled={busy} onClick={() => logoInputRef.current?.click()}>
+            {busy ? 'Uploading…' : 'Upload logo'}
+          </button>
           <button className="btn" disabled={busy}>Save</button>
         </div>
       </form>

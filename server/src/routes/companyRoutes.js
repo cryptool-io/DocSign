@@ -1,4 +1,5 @@
 const express = require('express');
+const multer = require('multer');
 const controller = require('../controllers/companyController');
 const oauthController = require('../controllers/emailOAuthController');
 const validate = require('../middleware/validate');
@@ -9,6 +10,9 @@ const schemas = require('../validation/companyValidation');
 const router = express.Router();
 router.use(requireAuth);
 
+// Workspace logo upload (already resized client-side; cap at 2 MB just in case).
+const logoUpload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 2 * 1024 * 1024, files: 1 } });
+
 // Which OAuth email providers this server can connect (Gmail/Outlook).
 router.get('/email-providers', oauthController.providers);
 
@@ -18,6 +22,7 @@ router.get('/:id', validate(idParam, 'params'), controller.get);
 router.patch('/:id', validate(idParam, 'params'), validate(schemas.update), controller.update);
 router.delete('/:id', validate(idParam, 'params'), controller.remove);
 
+router.post('/:id/logo', validate(idParam, 'params'), logoUpload.single('logo'), controller.uploadLogo);
 router.post('/:id/emails', validate(idParam, 'params'), validate(schemas.addEmail), controller.addEmail);
 router.delete('/:id/emails/:emailId', validate(idParam, 'params'), controller.removeEmail);
 router.post('/:id/emails/:emailId/default', validate(idParam, 'params'), controller.setDefaultEmail);

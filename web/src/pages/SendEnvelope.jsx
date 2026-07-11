@@ -678,6 +678,7 @@ export default function SendEnvelope() {
               activeType={activeType}
               setActiveType={setActiveType}
               activeSignerEmail={activeSignerEmail}
+              signers={placeableSigners}
               colorFor={colorFor}
             />
           </>

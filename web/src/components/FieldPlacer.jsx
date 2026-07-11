@@ -150,7 +150,7 @@ function PageOverlay({ pageNumber, fields, onAdd, onMove, onResize, onRemove, on
  * each one (required, label, auto-date). Field coordinates are fractions of page
  * size so they survive any scale. `signers` supplies the assignment palette.
  */
-export default function FieldPlacer({ documentId, doc, fields, setFields, activeType, setActiveType, activeSignerEmail, colorFor }) {
+export default function FieldPlacer({ documentId, doc, fields, setFields, activeType, setActiveType, activeSignerEmail, signers = [], colorFor }) {
   const [pdfUrl, setPdfUrl] = useState(null);
   const [numPages, setNumPages] = useState(0);
   const [err, setErr] = useState(null);
@@ -261,6 +261,20 @@ export default function FieldPlacer({ documentId, doc, fields, setFields, active
           {selected ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               <div style={{ fontWeight: 600, fontSize: 13, textTransform: 'capitalize' }}>Field · {selected.type}</div>
+              {signers.length > 1 && (
+                <div className="field" style={{ marginBottom: 0 }}>
+                  <label>Signed by</label>
+                  <select
+                    className="select"
+                    value={selected.signerEmail || ''}
+                    onChange={(e) => patchField(selected._id, { signerEmail: e.target.value, signerRole: null })}
+                  >
+                    {signers.map((s) => (
+                      <option key={s.email} value={s.email}>{s.name || s.email}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
               <label className="checkbox" style={{ margin: 0 }}>
                 <input type="checkbox" checked={selected.required !== false} onChange={(e) => patchField(selected._id, { required: e.target.checked })} />
                 Mandatory (required to sign)

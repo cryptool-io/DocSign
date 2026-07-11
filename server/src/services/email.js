@@ -10,6 +10,18 @@ const APP_BASE_URL = (process.env.APP_BASE_URL || 'http://localhost:4400').repla
 // Mirrors AMT's "blank sender => dry-run" behavior so local dev never needs SMTP.
 const DRY_RUN = !process.env.MAIL_HOST;
 
+// The system mailbox (SES/SMTP) can legitimately send FROM addresses on its own
+// verified domain — e.g. info@cryptool.io through cryptool.io's SES. An address
+// on a different domain (a personal Gmail, say) can't go out this way and needs
+// its own OAuth-connected mailbox. Used to decide "sends via system mail" vs
+// "must connect your own mailbox".
+const SYSTEM_DOMAIN = (FROM_EMAIL.split('@')[1] || '').toLowerCase();
+const systemCanSendFrom = (addr) => {
+  if (DRY_RUN) return false;
+  if (!addr) return true; // no explicit from-address → the system default sends it
+  return (String(addr).split('@')[1] || '').toLowerCase() === SYSTEM_DOMAIN;
+};
+
 let transporter = null;
 const getTransporter = () => {
   if (DRY_RUN) return null;
@@ -148,6 +160,8 @@ const envelopeCompleted = ({ to, subject, downloadUrl }) =>
 
 module.exports = {
   DRY_RUN,
+  SYSTEM_DOMAIN,
+  systemCanSendFrom,
   APP_BASE_URL,
   sendEmail,
   verifyEmail,

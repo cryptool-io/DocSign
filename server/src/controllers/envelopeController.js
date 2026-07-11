@@ -10,7 +10,7 @@ const {
 const { DocCompany, DocCompanyEmail } = require('../models');
 const { generateOpaqueToken } = require('../services/docroom/tokens');
 const { appendAuditEvent } = require('../services/docroom/hashChain');
-const { APP_BASE_URL, signatureRequest, signatureRequestHtml, DRY_RUN } = require('../services/email');
+const { APP_BASE_URL, signatureRequest, signatureRequestHtml, systemCanSendFrom } = require('../services/email');
 const oauth = require('../services/emailOAuth');
 const { decryptSecret } = require('../services/secretStore');
 const { asyncHandler, notFound, badRequest, forbidden } = require('../utils/http');
@@ -303,11 +303,11 @@ exports.send = asyncHandler(async (req, res) => {
     try {
       connection = await resolveSendingConnection(req.userId, env.DocCompanyId, env.FromEmail);
     } catch (err) {
-      // Not connected via OAuth. If a global mail transport (SES/SMTP) is
-      // configured, fall back to sending FROM the company address THROUGH the
-      // system mailbox (legitimate when the domain is verified with the provider).
-      // Only hard-fail when there's no transport at all (dry-run).
-      if (DRY_RUN) throw err;
+      // Not connected via OAuth. If the system mailbox can legitimately send from
+      // this address (its domain is verified with our provider — e.g.
+      // info@cryptool.io via cryptool.io's SES), fall back to sending through it.
+      // Otherwise (a different domain, or no transport) require an OAuth mailbox.
+      if (!systemCanSendFrom(identity && identity.fromEmail)) throw err;
       connection = null;
     }
     if (connection) connection.fromName = identity.fromName;

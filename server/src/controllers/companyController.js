@@ -1,6 +1,7 @@
 const { DocCompany, DocCompanyEmail, sequelize } = require('../models');
 const { asyncHandler, notFound, badRequest, conflict } = require('../utils/http');
 const { slugify } = require('../utils/misc');
+const { systemCanSendFrom, SYSTEM_DOMAIN } = require('../services/email');
 
 const serialize = (company) => ({
   id: company.id,
@@ -21,8 +22,12 @@ const serialize = (company) => ({
       isDefault: e.IsDefault,
       verified: Boolean(e.VerifiedAt),
       provider: e.Provider || null,
-      // Only a connected + verified mailbox can send signature-request emails.
+      // canSend = OAuth-connected mailbox (sends THROUGH the user's own account).
       canSend: Boolean(e.Provider && e.VerifiedAt),
+      // systemSend = the system SES/SMTP mailbox can send from this address
+      // (same verified domain) without connecting anything.
+      systemSend: !Boolean(e.Provider && e.VerifiedAt) && systemCanSendFrom(e.Email),
+      systemDomain: SYSTEM_DOMAIN,
       connectedAt: e.OAuthConnectedAt || null
     })),
   createdAt: company.createdAt

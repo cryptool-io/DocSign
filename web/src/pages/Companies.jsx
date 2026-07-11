@@ -73,12 +73,16 @@ function CompanyCard({ company, providers, onChanged }) {
                   <span className="badge green" style={{ marginLeft: 8 }}>
                     connected · {e.provider === 'google' ? 'Gmail' : e.provider === 'microsoft' ? 'Outlook' : e.provider}
                   </span>
+                ) : e.systemSend ? (
+                  <span className="badge green" style={{ marginLeft: 8 }} title={`Sent through the ${e.systemDomain} system mailbox`}>
+                    ready · sends via {e.systemDomain} mail
+                  </span>
                 ) : (
-                  <span className="badge amber" style={{ marginLeft: 8 }}>not connected — can't send</span>
+                  <span className="badge amber" style={{ marginLeft: 8 }}>connect a mailbox to send from this address</span>
                 )}
               </td>
               <td style={{ textAlign: 'right' }}>
-                {e.canSend && !e.isDefault && (
+                {(e.canSend || e.systemSend) && !e.isDefault && (
                   <button className="btn sm" onClick={() => setDefault(e.id)}>
                     Make default
                   </button>
@@ -113,7 +117,7 @@ function CompanyCard({ company, providers, onChanged }) {
         ))}
       </div>
       <p className="muted" style={{ fontSize: 12, marginTop: 10 }}>
-        Connecting signs you in with the provider and lets DocSign send signature requests from that address, through your own mailbox. Only connected addresses can send.
+        Addresses on our verified mail domain send automatically through the system mailbox — no connection needed. To send from a mailbox on another domain (e.g. a Gmail or Outlook address), connect it here so requests go out through your own account.
       </p>
     </div>
   );

@@ -139,7 +139,9 @@ export default function Documents() {
     const [d, l, t] = await Promise.all([
       api.get(`/documents${q ? `?${q}` : ''}`),
       api.get(`/links${q ? `?${q}` : ''}`),
-      api.get(`/templates${q ? `?${q}` : ''}`)
+      // All setups (not workspace-filtered) so a document's signing setups always
+      // show here, even if the setup was saved under a different/ no workspace.
+      api.get('/templates')
     ]);
     setItems(d.data.data);
     setLinks(l.data.data);
@@ -148,6 +150,17 @@ export default function Documents() {
   useEffect(() => {
     load();
   }, [activeId]);
+
+  const removeTemplate = async (id) => {
+    if (!confirm('Delete this signing setup? The document itself is not affected.')) return;
+    try {
+      await api.delete(`/templates/${id}`);
+      toast('Signing setup deleted');
+      load();
+    } catch (err) {
+      toast(apiError(err), 'err');
+    }
+  };
 
   const upload = async (file) => {
     if (!file) return;
@@ -241,16 +254,29 @@ export default function Documents() {
                     </td>
                     <td>
                       {tpls.length ? (
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
                           {tpls.map((t) => (
-                            <button
+                            <span
                               key={t.id}
-                              className="btn sm"
-                              title="Edit this signing setup"
-                              onClick={() => nav(`/templates/${t.id}`)}
+                              style={{ display: 'inline-flex', alignItems: 'center', border: '1px solid var(--border, #dcdcdc)', borderRadius: 6, overflow: 'hidden' }}
                             >
-                              {t.Name}{t.IsDefault ? ' ★' : ''}
-                            </button>
+                              <button
+                                className="btn sm"
+                                style={{ border: 'none', borderRadius: 0 }}
+                                title="Edit this signing setup"
+                                onClick={() => nav(`/templates/${t.id}`)}
+                              >
+                                {t.Name}{t.IsDefault ? ' ★' : ''}
+                              </button>
+                              <button
+                                className="btn sm"
+                                style={{ border: 'none', borderRadius: 0, color: '#dc2626', padding: '2px 7px', borderLeft: '1px solid var(--border, #dcdcdc)' }}
+                                title="Delete this signing setup"
+                                onClick={() => removeTemplate(t.id)}
+                              >
+                                ×
+                              </button>
+                            </span>
                           ))}
                         </div>
                       ) : (

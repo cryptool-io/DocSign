@@ -11,7 +11,9 @@ echo "===== deploy $(date -u +%FT%TZ) (branch $BRANCH) ====="
 git fetch origin "$BRANCH"
 git reset --hard "origin/$BRANCH"
 npm --prefix server install --no-audit --no-fund
-npm --prefix web install --no-audit --no-fund
+# The web build needs its devDependencies (vite, plugins), which a production
+# install (NODE_ENV=production) would skip — force them in.
+npm --prefix web install --no-audit --no-fund --include=dev
 npm --prefix server run migrate
 npm --prefix web run build
 pm2 restart docsign-server --update-env

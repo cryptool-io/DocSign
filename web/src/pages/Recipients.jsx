@@ -116,8 +116,8 @@ export default function Recipients() {
             <input className="input" value={form.company} onChange={set('company')} />
           </div>
           <div className="field">
-            <label>Title</label>
-            <input className="input" value={form.title} onChange={set('title')} />
+            <label>Role / title</label>
+            <input className="input" value={form.title} onChange={set('title')} placeholder="e.g. Contractor, CEO, Investor" />
           </div>
         </div>
         <div className="row">

@@ -85,10 +85,15 @@ const resolveSenderIdentity = async (ownerId, companyId, fromEmail, fallbackUser
   } else {
     chosen = linked.find((e) => e.IsDefault) || linked[0] || null;
   }
+  // Default Reply-To to the intended from-address. If that address is an alias
+  // the connected mailbox can't yet send "as" (so the provider rewrites the
+  // visible From to the signed-in account), a Reply-To still routes replies back
+  // to the workspace address the sender chose.
+  const fromChosen = chosen ? chosen.Email : company.SenderEmail || null;
   return {
     fromName: company.SenderName || company.Name,
-    fromEmail: chosen ? chosen.Email : company.SenderEmail || null,
-    replyTo: company.ReplyToEmail || null,
+    fromEmail: fromChosen,
+    replyTo: company.ReplyToEmail || fromChosen,
     logoUrl: company.LogoUrl || null
   };
 };

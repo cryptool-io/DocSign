@@ -13,7 +13,6 @@ import Recipients from './pages/Recipients.jsx';
 import Templates from './pages/Templates.jsx';
 import TemplateEditor from './pages/TemplateEditor.jsx';
 import LinkAnalytics from './pages/LinkAnalytics.jsx';
-import Envelopes from './pages/Envelopes.jsx';
 import EnvelopeDetail from './pages/EnvelopeDetail.jsx';
 import SendEnvelope from './pages/SendEnvelope.jsx';
 import Settings from './pages/Settings.jsx';
@@ -70,7 +69,7 @@ export default function App() {
           <Route path="templates/:id" element={<TemplateEditor />} />
           <Route path="templates/new" element={<TemplateEditor />} />
           <Route path="links/:id" element={<LinkAnalytics />} />
-          <Route path="envelopes" element={<Envelopes />} />
+          <Route path="envelopes" element={<Navigate to="/inbox" replace />} />
           <Route path="envelopes/:id" element={<EnvelopeDetail />} />
           <Route path="send" element={<SendEnvelope />} />
           <Route path="data-rooms" element={<DataRooms />} />

@@ -183,6 +183,9 @@ export default function PublicSign() {
           Thank you, {meta.signer.name}. Your signature has been recorded
           {meta.status === 'completed' ? ' and the document is now complete.' : '.'} You'll receive a copy by email.
         </p>
+        <div style={{ marginTop: 16 }}>
+          <a className="btn primary" href="/inbox">Back to DocSign</a>
+        </div>
       </Shell>
     );
 

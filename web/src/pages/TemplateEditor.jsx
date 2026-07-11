@@ -273,59 +273,68 @@ export default function TemplateEditor() {
         </div>
       </div>
 
-      {/* Selected-field config */}
-      {selected && (
-        <div className="card mb" style={{ background: 'var(--panel, #fafafa)' }}>
-          <div className="flex" style={{ gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-            <div className="field" style={{ marginBottom: 0 }}>
-              <label>Field · {selected.type}</label>
-              <select className="select" value={selected.signerRole || ''} onChange={(e) => patchField(selected._id, { signerRole: e.target.value })}>
-                {signers.map((s, i) => (<option key={s.key} value={s.key}>{s.label || `Signer ${i + 1}`}</option>))}
-              </select>
-            </div>
-            {selected.type === 'text' && (
-              <div className="field" style={{ marginBottom: 0, flex: 1 }}>
-                <label>What is this box for?</label>
-                <input className="input" value={selected.label || ''} onChange={(e) => patchField(selected._id, { label: e.target.value })} placeholder="e.g. Full name, Address, Company" />
-              </div>
-            )}
-            {selected.type === 'date' && (
-              <label className="checkbox" style={{ margin: 0 }}>
-                <input type="checkbox" checked={selected.autoFill !== false} onChange={(e) => patchField(selected._id, { autoFill: e.target.checked })} />
-                Auto-fill with the signing date (locked)
-              </label>
-            )}
-            <label className="checkbox" style={{ margin: 0 }}>
-              <input type="checkbox" checked={selected.required !== false} onChange={(e) => patchField(selected._id, { required: e.target.checked })} />
-              Required
-            </label>
-            <button className="btn sm danger" onClick={() => { removeField(selected._id); setSelectedId(null); }}>Remove field</button>
-          </div>
-        </div>
-      )}
-
       {!pdfData ? (
         <div className="empty">Choose a source document to place fields.</div>
       ) : (
-        <div style={{ textAlign: 'center' }}>
-          <Document file={pdfData} onLoadSuccess={({ numPages: n }) => setNumPages(n)} loading={<Spinner center />}>
-            {Array.from({ length: numPages }, (_, i) => (
-              <PageCanvas
-                key={i}
-                pageNumber={i + 1}
-                width={640}
-                fields={fields}
-                activeType={activeType}
-                colorFor={colorFor}
-                labelFor={(f) => signerLabel(f.signerRole)}
-                onAdd={addField}
-                onMove={moveField}
-                onRemove={removeField}
-                onSelect={setSelectedId}
-                selectedId={selectedId}
-              />
-            ))}
-          </Document>
+        <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
+          <div style={{ flex: 1, minWidth: 0, textAlign: 'center' }}>
+            <Document file={pdfData} onLoadSuccess={({ numPages: n }) => setNumPages(n)} loading={<Spinner center />}>
+              {Array.from({ length: numPages }, (_, i) => (
+                <PageCanvas
+                  key={i}
+                  pageNumber={i + 1}
+                  width={640}
+                  fields={fields}
+                  activeType={activeType}
+                  colorFor={colorFor}
+                  labelFor={(f) => signerLabel(f.signerRole)}
+                  onAdd={addField}
+                  onMove={moveField}
+                  onRemove={removeField}
+                  onSelect={setSelectedId}
+                  selectedId={selectedId}
+                />
+              ))}
+            </Document>
+          </div>
+
+          {/* Field settings — pinned right so they stay in view while scrolling. */}
+          <div style={{ width: 290, flexShrink: 0, position: 'sticky', top: 12, alignSelf: 'flex-start' }}>
+            <div className="card" style={{ background: 'var(--panel, #fafafa)', textAlign: 'left' }}>
+              {selected ? (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                  <div className="field" style={{ marginBottom: 0 }}>
+                    <label style={{ textTransform: 'capitalize' }}>Field · {selected.type} — who signs it?</label>
+                    <select className="select" value={selected.signerRole || ''} onChange={(e) => patchField(selected._id, { signerRole: e.target.value })}>
+                      {signers.map((s, i) => (<option key={s.key} value={s.key}>{s.label || `Signer ${i + 1}`}</option>))}
+                    </select>
+                  </div>
+                  {selected.type === 'text' && (
+                    <div className="field" style={{ marginBottom: 0 }}>
+                      <label>What is this box for?</label>
+                      <input className="input" value={selected.label || ''} onChange={(e) => patchField(selected._id, { label: e.target.value })} placeholder="e.g. Full name, Address, Company" />
+                    </div>
+                  )}
+                  {selected.type === 'date' && (
+                    <label className="checkbox" style={{ margin: 0 }}>
+                      <input type="checkbox" checked={selected.autoFill !== false} onChange={(e) => patchField(selected._id, { autoFill: e.target.checked })} />
+                      Auto-fill with the signing date (locked)
+                    </label>
+                  )}
+                  <label className="checkbox" style={{ margin: 0 }}>
+                    <input type="checkbox" checked={selected.required !== false} onChange={(e) => patchField(selected._id, { required: e.target.checked })} />
+                    Required
+                  </label>
+                  <button className="btn sm danger" onClick={() => { removeField(selected._id); setSelectedId(null); }}>Remove field</button>
+                </div>
+              ) : (
+                <div className="muted" style={{ fontSize: 13, lineHeight: 1.5 }}>
+                  <div style={{ fontWeight: 600, color: 'var(--text)', marginBottom: 6 }}>Field settings</div>
+                  Click a placed field on the page to choose who signs it, label a text box, set required, or remove it.
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       )}
     </>

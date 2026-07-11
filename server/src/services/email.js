@@ -157,13 +157,19 @@ const linkViewedNotice = ({ to, docName, viewerEmail, when }) =>
 
 // Shared HTML so the request can go via the global mailbox OR a connected one.
 // `logoUrl` brands the email with the sending workspace's logo.
-const signatureRequestHtml = ({ signerName, senderName, message, signUrl, logoUrl }) =>
-  layout(
+const signatureRequestHtml = ({ signerName, senderName, message, signUrl, logoUrl }) => {
+  // Use the sender's custom note when provided; otherwise a single, professional
+  // default. Never show both (that read as the same sentence twice).
+  const body = message
+    ? `<p>${message}</p>`
+    : `<p><strong>${senderName}</strong> has sent you a document to review and sign.</p>`;
+  return layout(
     `${senderName} requested your signature`,
-    `<p>Hi ${signerName},</p>${message ? `<p>${message}</p>` : ''}<p>Please review and sign the document.</p>`,
+    `<p>Hi ${signerName},</p>${body}<p>Use the secure button below to open, review, and sign the document. It only takes a moment.</p>`,
     { label: 'Review & sign', url: signUrl },
     { name: senderName, logoUrl }
   );
+};
 
 const signatureRequest = ({ to, signerName, senderName, fromEmail, replyTo, subject, message, signUrl, logoUrl }) =>
   sendEmail({

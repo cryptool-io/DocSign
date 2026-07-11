@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import api, { apiError } from '../lib/api.js';
 import { useCompany } from '../lib/company.js';
+import { useAuth } from '../lib/store.js';
 import * as keystore from '../lib/keystore.js';
 import { appendKey } from '../lib/linkkey.js';
 import { Spinner, useToast } from '../lib/ui.jsx';
@@ -24,6 +25,7 @@ export default function SendEnvelope() {
   const [sending, setSending] = useState(false);
 
   const { companies, activeId } = useCompany();
+  const user = useAuth((s) => s.user);
   const [documentId, setDocumentId] = useState(loc.state?.documentId || '');
   const [templateId, setTemplateId] = useState('');
   const [companyId, setCompanyId] = useState(activeId || '');
@@ -208,6 +210,61 @@ export default function SendEnvelope() {
       } else {
         toast('Sent for signature');
         nav(`/envelopes/${envelopeId}`);
+      }
+    } catch (err) {
+      toast(apiError(err), 'err');
+    } finally {
+      setSending(false);
+    }
+  };
+
+  // Send the exact same request to yourself so you can see how it looks and
+  // confirm delivery (and, for a connected mailbox, the From address). Every
+  // placed field is remapped to you so the signing page renders them.
+  const sendTest = async () => {
+    if (!documentId) return toast('Choose a document first.', 'err');
+    if (!user?.email) return toast('No account email found to test with.', 'err');
+    const testMode = docEncrypted ? 'link' : 'email';
+    setSending(true);
+    try {
+      const placedFields = fields.map((f) => ({
+        type: f.type,
+        signerEmail: user.email,
+        pageNumber: f.pageNumber,
+        x: f.x,
+        y: f.y,
+        width: f.width,
+        height: f.height,
+        required: f.required !== false,
+        autoFill: f.type === 'date' ? f.autoFill === true : false,
+        label: f.label || null
+      }));
+      const { data } = await api.post('/envelopes', {
+        documentId,
+        templateId: templateId || null,
+        companyId: companyId || null,
+        fromEmail: fromEmail || null,
+        deliveryMode: testMode,
+        requireVerification: testMode !== 'link',
+        subject: `[TEST] ${subject.trim() || 'Signature request'}`,
+        message: message || null,
+        signingOrder: 'parallel',
+        ...(placedFields.length ? { fields: placedFields } : {}),
+        signers: [{ name: user.name || 'Test signer', email: user.email, signerRole: 'test', signingOrder: 1 }]
+      });
+      const envelopeId = data.data.id;
+      const sendRes = await api.post(`/envelopes/${envelopeId}/send`);
+      if (testMode === 'link') {
+        let links = sendRes.data.links || [];
+        const selectedDoc = docs.find((d) => d.id === documentId);
+        if (selectedDoc?.Encrypted && selectedDoc.WrappedDek) {
+          const dekB64 = await keystore.documentKeyB64(selectedDoc.WrappedDek);
+          links = links.map((l) => ({ ...l, url: appendKey(l.url, dekB64) }));
+        }
+        setResultLinks({ envelopeId, links });
+        toast('Test link ready');
+      } else {
+        toast(`Test sent to ${user.email}`);
       }
     } catch (err) {
       toast(apiError(err), 'err');
@@ -496,6 +553,14 @@ export default function SendEnvelope() {
         </button>
         <button className="btn" disabled={sending} onClick={() => submit(false)}>
           Save as draft
+        </button>
+        <button
+          className="btn"
+          disabled={sending || !documentId}
+          onClick={sendTest}
+          title={user?.email ? `Send a test copy to ${user.email}` : 'Send a test copy to yourself'}
+        >
+          🧪 Send test to me
         </button>
       </div>
     </>

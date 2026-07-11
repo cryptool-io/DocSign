@@ -146,33 +146,8 @@ export default function FieldPlacer({ documentId, doc, fields, setFields, active
   const selected = fields.find((f) => f._id === selectedId) || null;
 
   return (
-    <div>
-      {selected && (
-        <div className="card mb" style={{ background: 'var(--panel, #fafafa)', textAlign: 'left' }}>
-          <div className="flex" style={{ gap: 14, flexWrap: 'wrap', alignItems: 'flex-end' }}>
-            <div style={{ fontWeight: 600, fontSize: 13 }}>Field · {selected.type}</div>
-            <label className="checkbox" style={{ margin: 0 }}>
-              <input type="checkbox" checked={selected.required !== false} onChange={(e) => patchField(selected._id, { required: e.target.checked })} />
-              Mandatory (required to sign)
-            </label>
-            {selected.type === 'text' && (
-              <div className="field" style={{ marginBottom: 0, flex: 1, minWidth: 180 }}>
-                <label>What is this box for?</label>
-                <input className="input" value={selected.label || ''} onChange={(e) => patchField(selected._id, { label: e.target.value })} placeholder="e.g. Full name, Address" />
-              </div>
-            )}
-            {selected.type === 'date' && (
-              <label className="checkbox" style={{ margin: 0 }}>
-                <input type="checkbox" checked={selected.autoFill !== false} onChange={(e) => patchField(selected._id, { autoFill: e.target.checked })} />
-                Auto-fill with the signing date
-              </label>
-            )}
-            <button className="btn sm danger" onClick={() => { removeField(selected._id); setSelectedId(null); }}>Remove field</button>
-          </div>
-        </div>
-      )}
-
-      <div style={{ textAlign: 'center' }}>
+    <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
+      <div style={{ flex: 1, minWidth: 0, textAlign: 'center' }}>
         <Document file={pdfUrl} onLoadSuccess={({ numPages: n }) => setNumPages(n)} loading={<Spinner center />}>
           {Array.from({ length: numPages }, (_, i) => (
             <PageOverlay
@@ -189,6 +164,40 @@ export default function FieldPlacer({ documentId, doc, fields, setFields, active
             />
           ))}
         </Document>
+      </div>
+
+      {/* Field settings — pinned to the right so they stay in view while you
+          scroll the document. Shows the selected field's options, or a hint. */}
+      <div style={{ width: 290, flexShrink: 0, position: 'sticky', top: 12, alignSelf: 'flex-start' }}>
+        <div className="card" style={{ background: 'var(--panel, #fafafa)', textAlign: 'left' }}>
+          {selected ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div style={{ fontWeight: 600, fontSize: 13, textTransform: 'capitalize' }}>Field · {selected.type}</div>
+              <label className="checkbox" style={{ margin: 0 }}>
+                <input type="checkbox" checked={selected.required !== false} onChange={(e) => patchField(selected._id, { required: e.target.checked })} />
+                Mandatory (required to sign)
+              </label>
+              {selected.type === 'text' && (
+                <div className="field" style={{ marginBottom: 0 }}>
+                  <label>What is this box for?</label>
+                  <input className="input" value={selected.label || ''} onChange={(e) => patchField(selected._id, { label: e.target.value })} placeholder="e.g. Full name, Address" />
+                </div>
+              )}
+              {selected.type === 'date' && (
+                <label className="checkbox" style={{ margin: 0 }}>
+                  <input type="checkbox" checked={selected.autoFill !== false} onChange={(e) => patchField(selected._id, { autoFill: e.target.checked })} />
+                  Auto-fill with the signing date
+                </label>
+              )}
+              <button className="btn sm danger" onClick={() => { removeField(selected._id); setSelectedId(null); }}>Remove field</button>
+            </div>
+          ) : (
+            <div className="muted" style={{ fontSize: 13, lineHeight: 1.5 }}>
+              <div style={{ fontWeight: 600, color: 'var(--text)', marginBottom: 6 }}>Field settings</div>
+              Click a placed field on the document to set whether it's required, label a text box, or remove it.
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

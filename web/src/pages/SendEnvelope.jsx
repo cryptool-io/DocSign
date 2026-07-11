@@ -88,6 +88,8 @@ export default function SendEnvelope() {
           signingOrder: i + 1
         }))
       );
+      // Two or more signers default to signing in steps (one after another).
+      if (tpl.SignerRoles.length > 1) setOrder('sequential');
     }
     if (tpl?.SourceDocumentId && !documentId) setDocumentId(tpl.SourceDocumentId);
     // Prefill the saved subject/message, but never clobber something typed.
@@ -231,6 +233,8 @@ export default function SendEnvelope() {
 
   // Show documents belonging to the chosen workspace (or all when none chosen).
   const filteredDocs = companyId ? docs.filter((d) => d.DocCompanyId === companyId) : docs;
+  // Saved signing setups for the chosen document (you can pick which to apply).
+  const docSetups = documentId ? templates.filter((t) => t.SourceDocumentId === documentId) : [];
   const setSigner = (i, k, v) => setSigners((s) => s.map((row, idx) => (idx === i ? { ...row, [k]: v } : row)));
   const addSigner = () => setSigners((s) => [...s, { name: '', email: '', signerRole: '', signingOrder: s.length + 1 }]);
   const removeSigner = (i) => setSigners((s) => s.filter((_, idx) => idx !== i));
@@ -531,19 +535,28 @@ export default function SendEnvelope() {
             </select>
           </div>
           <div className="field">
-            <label>Signing fields</label>
-            <div className="input" style={{ display: 'flex', alignItems: 'center', minHeight: 40, background: 'var(--panel, #fafafa)' }}>
-              {!documentId ? (
+            <label>Signing setup</label>
+            {!documentId ? (
+              <div className="input" style={{ display: 'flex', alignItems: 'center', minHeight: 40, background: 'var(--panel, #fafafa)' }}>
                 <span className="muted">Choose a document first</span>
-              ) : templateId ? (
-                <span>✓ Using this document’s saved signing setup</span>
-              ) : (
+              </div>
+            ) : docSetups.length > 0 ? (
+              <select className="select" value={templateId} onChange={(e) => setTemplateId(e.target.value)}>
+                <option value="">No setup — place fields manually</option>
+                {docSetups.map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {t.Name}{t.IsDefault ? ' (default)' : ''}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <div className="input" style={{ display: 'flex', alignItems: 'center', minHeight: 40, background: 'var(--panel, #fafafa)' }}>
                 <span className="muted">
-                  No setup on this document — place fields below, or set one up under{' '}
+                  None yet — place fields below, or set one up under{' '}
                   <a href="#" onClick={(e) => { e.preventDefault(); nav('/documents'); }}>Documents</a>.
                 </span>
-              )}
-            </div>
+              </div>
+            )}
           </div>
         </div>
       </div>

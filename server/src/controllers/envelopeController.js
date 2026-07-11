@@ -162,7 +162,7 @@ const withGraph = (id, ownerId) =>
   });
 
 exports.list = asyncHandler(async (req, res) => {
-  const where = { ...(await listScope(req.userId, req.query, 'CreatedBy')) };
+  const where = { ...(await listScope(req.userId, req.query, 'CreatedBy')), ArchivedAt: null };
   if (req.query.projectId) where.DocProjectId = req.query.projectId;
   if (req.query.status) where.Status = req.query.status;
   const envelopes = await DocEnvelope.findAll({
@@ -538,6 +538,21 @@ exports.void = asyncHandler(async (req, res) => {
     );
   });
   res.json({ data: serialize(await withGraph(env.id, req.userId)) });
+});
+
+/**
+ * Remove an envelope from the sender's list (archive). Only for envelopes that
+ * are no longer active — a draft or a terminal one (voided/declined/completed/
+ * expired). An active envelope (sent/partially_signed) must be voided first.
+ */
+exports.remove = asyncHandler(async (req, res) => {
+  const env = await withGraph(req.params.id, req.userId);
+  if (!env) throw notFound('Envelope not found');
+  if (env.Status === 'sent' || env.Status === 'partially_signed') {
+    throw badRequest('Cancel this request before deleting it.', 'still_active');
+  }
+  await env.update({ ArchivedAt: new Date() });
+  res.json({ ok: true });
 });
 
 /** Resend the signing email to a specific pending signer. */

@@ -17,6 +17,7 @@ router.get('/:id', validate(idParam, 'params'), controller.get);
 router.post('/:id/send', validate(idParam, 'params'), controller.send);
 router.get('/:id/links', validate(idParam, 'params'), controller.links);
 router.post('/:id/void', validate(idParam, 'params'), validate(schemas.decline), controller.void);
+router.delete('/:id', validate(idParam, 'params'), controller.remove);
 router.post('/:id/signers/:signerId/remind', validate(idParam, 'params'), controller.remind);
 router.get('/:id/audit', validate(idParam, 'params'), audit.trail);
 router.get('/:id/completed-file', validate(idParam, 'params'), audit.completedFile);

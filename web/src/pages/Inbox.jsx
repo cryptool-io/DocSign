@@ -4,8 +4,6 @@ import api, { apiError } from '../lib/api.js';
 import { useCompany, companyParam } from '../lib/company.js';
 import { Spinner, Badge, fmtDate, useToast } from '../lib/ui.jsx';
 
-const TERMINAL = ['completed', 'voided', 'declined'];
-
 /**
  * Unified signatures hub. Three tabs:
  *  - Sent by me: envelopes you've sent out (cancel / open detail).
@@ -32,12 +30,25 @@ export default function Inbox() {
     load();
   }, [tab, activeId]);
 
-  const cancel = async (e, id, status) => {
+  const cancel = async (e, id) => {
     e.stopPropagation();
-    if (!confirm(status === 'draft' ? 'Delete this draft?' : 'Cancel this request? Signers will no longer be able to sign.')) return;
+    if (!confirm('Cancel this request? Signers will no longer be able to sign.')) return;
     try {
       await api.post(`/envelopes/${id}/void`, { reason: 'Cancelled by sender' });
-      toast(status === 'draft' ? 'Draft deleted' : 'Request cancelled');
+      toast('Request cancelled');
+      load();
+    } catch (err) {
+      toast(apiError(err), 'err');
+    }
+  };
+
+  // Remove a non-active envelope (draft/voided/declined/completed) from the list.
+  const del = async (e, id) => {
+    e.stopPropagation();
+    if (!confirm('Delete this from your list? This can’t be undone.')) return;
+    try {
+      await api.delete(`/envelopes/${id}`);
+      toast('Deleted');
       load();
     } catch (err) {
       toast(apiError(err), 'err');
@@ -120,9 +131,13 @@ export default function Inbox() {
                     </td>
                     <td className="muted">{e.sentAt ? fmtDate(e.sentAt) : 'Draft'}</td>
                     <td style={{ textAlign: 'right' }} onClick={(ev) => ev.stopPropagation()}>
-                      {!TERMINAL.includes(e.status) && (
-                        <button className="btn sm danger" onClick={(ev) => cancel(ev, e.id, e.status)}>
-                          {e.status === 'draft' ? 'Delete' : 'Cancel'}
+                      {e.status === 'sent' || e.status === 'partially_signed' ? (
+                        <button className="btn sm danger" onClick={(ev) => cancel(ev, e.id)}>
+                          Cancel
+                        </button>
+                      ) : (
+                        <button className="btn sm danger" onClick={(ev) => del(ev, e.id)}>
+                          Delete
                         </button>
                       )}
                     </td>

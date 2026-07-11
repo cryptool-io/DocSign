@@ -47,7 +47,8 @@ module.exports = (sequelize, DataTypes) => {
       CompletedFileKey: { type: DataTypes.STRING, allowNull: true },
       CompletedSha256: { type: DataTypes.STRING(64), allowNull: true },
       VoidedAt: { type: DataTypes.DATE, allowNull: true },
-      VoidReason: { type: DataTypes.TEXT, allowNull: true }
+      VoidReason: { type: DataTypes.TEXT, allowNull: true },
+      ArchivedAt: { type: DataTypes.DATE, allowNull: true }
     },
     { sequelize, modelName: 'DocEnvelope', tableName: 'DocEnvelopes', timestamps: true }
   );

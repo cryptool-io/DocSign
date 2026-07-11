@@ -17,7 +17,9 @@ const {
 const { verifyAccessToken } = require('../services/authTokens');
 const { appendAuditEvent } = require('../services/docroom/hashChain');
 const { finalizeEnvelope } = require('../services/docroom/completion');
-const { signerOtp, envelopeCompleted } = require('../services/email');
+const { signerOtp, signerOtpHtml, sendEmail, sendViaSmtp, envelopeCompleted } = require('../services/email');
+const oauth = require('../services/emailOAuth');
+const { resolveSenderIdentity, resolveSendingConnection } = require('./envelopeController');
 const { asyncHandler, notFound, badRequest, forbidden, unauthorized, tooMany, clientIp } = require('../utils/http');
 
 const OTP_TTL_MS = 10 * 60 * 1000;
@@ -120,6 +122,38 @@ exports.start = asyncHandler(async (req, res) => {
   res.json({ data: { signerToken: token } });
 });
 
+/**
+ * Send the verification code from the envelope's workspace mailbox + brand — the
+ * same identity the "please sign" email used. For a workspace with a connected
+ * mailbox it goes through that mailbox; otherwise (or on any failure) it falls
+ * back to the system mailbox so the signer can always get their code.
+ */
+const sendOtpBranded = async (env, signer, code) => {
+  const to = signer.Email;
+  try {
+    if (env.DocCompanyId) {
+      const identity = await resolveSenderIdentity(env.CreatedBy, env.DocCompanyId, env.FromEmail, { Name: 'DocSign' });
+      let connection = null;
+      try {
+        connection = await resolveSendingConnection(env.CreatedBy, env.DocCompanyId, env.FromEmail);
+      } catch {
+        connection = null;
+      }
+      const subject = `Your signing verification code: ${code}`;
+      const html = signerOtpHtml(code, { name: identity.fromName, logoUrl: identity.logoUrl });
+      const msg = { to, subject, html, replyTo: identity.replyTo };
+      if (connection && connection.kind === 'smtp') return await sendViaSmtp(connection, msg);
+      if (connection && connection.kind === 'oauth') return await oauth.sendViaConnection(connection, msg);
+      // No connected mailbox → system mailbox, but keep the workspace From + brand.
+      return await sendEmail({ ...msg, fromName: identity.fromName, fromEmail: identity.fromEmail });
+    }
+  } catch (e) {
+    console.warn(`[docsign] branded OTP failed, using system mailbox: ${e.message}`);
+  }
+  // Personal envelope, or a failure above: plain system-mailbox code.
+  return signerOtp({ to, code });
+};
+
 /** Public: send the signer a 6-digit OTP to prove mailbox control. */
 exports.requestOtp = asyncHandler(async (req, res) => {
   const { signer, env } = await loadSignerByAccessToken(req.params.token);
@@ -131,7 +165,11 @@ exports.requestOtp = asyncHandler(async (req, res) => {
     OtpExpiresAt: new Date(Date.now() + OTP_TTL_MS),
     OtpAttempts: 0
   });
-  await signerOtp({ to: signer.Email, code });
+
+  // Send the code from the SAME workspace mailbox + brand as the signing request
+  // (not the generic system mailbox). Falls back to the system mailbox on any
+  // problem so verification never gets stuck.
+  await sendOtpBranded(env, signer, code);
   res.json({ ok: true, email: signer.Email.replace(/(.{2}).*(@.*)/, '$1***$2') });
 });
 

@@ -181,16 +181,26 @@ const signatureRequest = ({ to, signerName, senderName, fromEmail, replyTo, subj
     html: signatureRequestHtml({ signerName, senderName, message, signUrl, logoUrl })
   });
 
-const signerOtp = ({ to, code }) =>
+// Shared HTML so the code can go via the system mailbox OR a connected one, with
+// the sending workspace's brand (logo + name).
+const signerOtpHtml = (code, brand) =>
+  layout(
+    'Your verification code',
+    `<p>Use this code to verify your identity and open the document:</p>
+       <p style="font-size:30px;font-weight:700;letter-spacing:6px;margin:16px 0">${code}</p>
+       <p style="font-size:13px;color:#666">This code expires in 10 minutes.</p>`,
+    null,
+    brand
+  );
+
+const signerOtp = ({ to, code, fromName, fromEmail, replyTo, logoUrl }) =>
   sendEmail({
     to,
+    fromName,
+    fromEmail,
+    replyTo,
     subject: `Your signing verification code: ${code}`,
-    html: layout(
-      'Your verification code',
-      `<p>Use this code to verify your identity and open the document:</p>
-       <p style="font-size:30px;font-weight:700;letter-spacing:6px;margin:16px 0">${code}</p>
-       <p style="font-size:13px;color:#666">This code expires in 10 minutes.</p>`
-    )
+    html: signerOtpHtml(code, fromName || logoUrl ? { name: fromName, logoUrl } : undefined)
   });
 
 const envelopeCompleted = ({ to, subject, downloadUrl }) =>
@@ -218,5 +228,6 @@ module.exports = {
   signatureRequest,
   signatureRequestHtml,
   signerOtp,
+  signerOtpHtml,
   envelopeCompleted
 };

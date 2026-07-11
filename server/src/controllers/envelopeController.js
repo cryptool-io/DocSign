@@ -557,3 +557,8 @@ exports.remind = asyncHandler(async (req, res) => {
   await signer.update({ RemindedAt: new Date() });
   res.json({ ok: true });
 });
+
+// Shared so the OTP email can be sent from the SAME workspace mailbox + brand as
+// the signing request (see publicSignController.requestOtp).
+exports.resolveSenderIdentity = resolveSenderIdentity;
+exports.resolveSendingConnection = resolveSendingConnection;

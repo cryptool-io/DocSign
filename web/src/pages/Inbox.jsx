@@ -62,7 +62,7 @@ export default function Inbox() {
     <>
       <div className="page-head">
         <div>
-          <h1>Signatures</h1>
+          <h1>Pending signatures</h1>
           <p className="muted">What you've sent out, and what's waiting on your signature.</p>
         </div>
         <button className="btn primary" onClick={() => nav('/send')}>

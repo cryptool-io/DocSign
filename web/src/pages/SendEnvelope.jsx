@@ -165,6 +165,7 @@ export default function SendEnvelope() {
         width: f.width,
         height: f.height,
         required: f.required !== false,
+        autoFill: f.type === 'date' ? f.autoFill === true : false,
         label: f.label || null
       }));
 

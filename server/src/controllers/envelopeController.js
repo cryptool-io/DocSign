@@ -203,6 +203,7 @@ exports.create = asyncHandler(async (req, res) => {
       width: f.Width,
       height: f.Height,
       required: f.Required,
+      autoFill: f.AutoFill,
       label: f.Label
     }));
 
@@ -269,6 +270,7 @@ exports.create = asyncHandler(async (req, res) => {
         Width: f.width,
         Height: f.height,
         Required: f.required !== false,
+        AutoFill: f.autoFill === true,
         Label: f.label || null
       });
     }

@@ -29,6 +29,8 @@ module.exports = (sequelize, DataTypes) => {
       Width: { type: DataTypes.FLOAT, allowNull: false },
       Height: { type: DataTypes.FLOAT, allowNull: false },
       Required: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
+      // Date fields: auto-fill with the signing date (locked) vs manual entry.
+      AutoFill: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: false },
       Label: { type: DataTypes.STRING, allowNull: true },
       Value: { type: DataTypes.TEXT, allowNull: true }
     },

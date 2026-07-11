@@ -219,6 +219,7 @@ exports.fields = asyncHandler(async (req, res) => {
       width: f.Width,
       height: f.Height,
       required: f.Required,
+      autoFill: f.AutoFill,
       label: f.Label
     }))
   });
@@ -317,9 +318,10 @@ exports.submit = asyncHandler(async (req, res) => {
         value = signatureType === 'typed' ? typedName : null;
       } else if (f.Type === 'initials') {
         value = initialsType === 'drawn' ? null : typedInitials;
-      } else if (f.Type === 'date' && !value) {
-        // Manual date wins (value already set from the signer); else stamp today.
-        value = nowIso;
+      } else if (f.Type === 'date') {
+        // Auto-fill dates are always stamped with the signing date; manual dates
+        // use the signer's entry, falling back to today.
+        value = f.AutoFill ? nowIso : value || nowIso;
       } else if (f.Type === 'checkbox') {
         value = value ? 'X' : '';
       }

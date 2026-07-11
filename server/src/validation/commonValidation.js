@@ -72,6 +72,7 @@ const field = Joi.object({
   width: Joi.number().min(0.001).max(1).required(),
   height: Joi.number().min(0.001).max(1).required(),
   required: Joi.boolean().default(true),
+  autoFill: Joi.boolean().default(false),
   label: Joi.string().max(160).allow('', null)
 });
 

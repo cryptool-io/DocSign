@@ -357,13 +357,17 @@ export default function PublicSign() {
                             <span style={{ fontFamily: 'cursive', fontSize: 14 }}>{typedInitials || 'initials'}</span>
                           )
                         ) : f.type === 'date' ? (
-                          <input
-                            className="input"
-                            style={{ padding: 2, height: '100%', fontSize: 12, textAlign: 'center' }}
-                            value={values[f.id] || ''}
-                            onChange={(e) => setValues((v) => ({ ...v, [f.id]: e.target.value }))}
-                            title="Signing date (auto-filled; you can edit it)"
-                          />
+                          f.autoFill ? (
+                            <span style={{ fontSize: 12 }} title="Auto-filled with the date you sign">{new Date().toLocaleDateString()}</span>
+                          ) : (
+                            <input
+                              className="input"
+                              style={{ padding: 2, height: '100%', fontSize: 12, textAlign: 'center' }}
+                              value={values[f.id] || ''}
+                              onChange={(e) => setValues((v) => ({ ...v, [f.id]: e.target.value }))}
+                              title="Signing date — you can edit it"
+                            />
+                          )
                         ) : f.type === 'checkbox' ? (
                           <input type="checkbox" checked={!!values[f.id]} onChange={(e) => setValues((v) => ({ ...v, [f.id]: e.target.checked }))} />
                         ) : (

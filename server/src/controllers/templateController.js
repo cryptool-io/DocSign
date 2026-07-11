@@ -14,6 +14,7 @@ const serialize = (tpl) => ({
     width: f.Width,
     height: f.Height,
     required: f.Required,
+    autoFill: f.AutoFill,
     label: f.Label
   }))
 });
@@ -52,6 +53,7 @@ const fieldRows = (templateId, fields) =>
     Width: f.width,
     Height: f.height,
     Required: f.required !== false,
+    AutoFill: f.autoFill === true,
     Label: f.label || null
   }));
 

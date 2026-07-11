@@ -571,41 +571,48 @@ export default function SendEnvelope() {
           </div>
         </div>
 
-        {placeableSigners.length === 0 ? (
-          <div className="empty">Add a signer with an email above to start placing fields.</div>
-        ) : !documentId ? (
+        {!documentId ? (
           <div className="empty">Choose a document above.</div>
         ) : (
           <>
-            <div className="flex" style={{ flexWrap: 'wrap', gap: 10, marginBottom: 8 }}>
-              <span className="muted">Signer:</span>
-              {placeableSigners.map((s) => (
-                <button
-                  key={s.email}
-                  className={`btn sm ${activeSignerEmail === s.email ? 'primary' : ''}`}
-                  onClick={() => setActiveSignerEmail(s.email)}
-                  style={{ borderLeft: `4px solid ${colorByEmail[s.email]}` }}
-                >
-                  {s.name || s.email}
-                </button>
-              ))}
-            </div>
-            <div className="flex" style={{ flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
-              <span className="muted">Field:</span>
-              {FIELD_TYPES.map((ft) => (
-                <button
-                  key={ft.type}
-                  className={`btn sm ${activeType === ft.type ? 'primary' : ''}`}
-                  onClick={() => setActiveType(activeType === ft.type ? null : ft.type)}
-                >
-                  {ft.label}
-                </button>
-              ))}
-              {activeType && <span className="badge blue">Click the page to place</span>}
-              <span className="muted" style={{ marginLeft: 'auto' }}>
-                {fields.length} field{fields.length === 1 ? '' : 's'} placed
-              </span>
-            </div>
+            {placeableSigners.length === 0 ? (
+              <p className="badge amber" style={{ display: 'inline-block', marginBottom: 12 }}>
+                Add a signer with an email above to place or assign fields.
+                {fields.length > 0 && ' The template’s fields are shown below — they’ll bind to signers once you fill in emails.'}
+              </p>
+            ) : (
+              <>
+                <div className="flex" style={{ flexWrap: 'wrap', gap: 10, marginBottom: 8 }}>
+                  <span className="muted">Signer:</span>
+                  {placeableSigners.map((s) => (
+                    <button
+                      key={s.email}
+                      className={`btn sm ${activeSignerEmail === s.email ? 'primary' : ''}`}
+                      onClick={() => setActiveSignerEmail(s.email)}
+                      style={{ borderLeft: `4px solid ${colorByEmail[s.email]}` }}
+                    >
+                      {s.name || s.email}
+                    </button>
+                  ))}
+                </div>
+                <div className="flex" style={{ flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
+                  <span className="muted">Field:</span>
+                  {FIELD_TYPES.map((ft) => (
+                    <button
+                      key={ft.type}
+                      className={`btn sm ${activeType === ft.type ? 'primary' : ''}`}
+                      onClick={() => setActiveType(activeType === ft.type ? null : ft.type)}
+                    >
+                      {ft.label}
+                    </button>
+                  ))}
+                  {activeType && <span className="badge blue">Click the page to place</span>}
+                  <span className="muted" style={{ marginLeft: 'auto' }}>
+                    {fields.length} field{fields.length === 1 ? '' : 's'} placed
+                  </span>
+                </div>
+              </>
+            )}
 
             <FieldPlacer
               documentId={documentId}

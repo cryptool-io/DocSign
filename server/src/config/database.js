@@ -1,4 +1,7 @@
-require('dotenv').config();
+// Load .env.local (real secrets) then .env (template) — same as the app runtime.
+// The Sequelize CLI loads THIS file directly (not app.js), so it must pull in
+// .env.local itself or migrations would use the template's placeholder creds.
+require('./env');
 
 /**
  * Sequelize reads one of these three blocks by NODE_ENV. A single DATABASE_URL

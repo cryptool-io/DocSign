@@ -44,7 +44,8 @@ function CompanyCard({ company, providers, onChanged }) {
       <div className="flex between mb">
         <div>
           <h2 style={{ margin: 0 }}>{company.name}</h2>
-          <div className="muted">
+          {company.description && <div className="muted">{company.description}</div>}
+          <div className="muted" style={{ fontSize: 12 }}>
             {company.senderName || '—'} · {company.senderEmail || 'no default sender'}
           </div>
         </div>
@@ -122,7 +123,7 @@ export default function Companies() {
   const { companies, load } = useCompany();
   const [loading, setLoading] = useState(true);
   const [providers, setProviders] = useState([]);
-  const [form, setForm] = useState({ name: '', senderName: '', senderEmail: '' });
+  const [form, setForm] = useState({ name: '', description: '', senderName: '', senderEmail: '' });
   const [busy, setBusy] = useState(false);
   const toast = useToast();
   const [params, setParams] = useSearchParams();
@@ -158,11 +159,12 @@ export default function Companies() {
     try {
       await api.post('/companies', {
         name: form.name,
+        description: form.description || null,
         senderName: form.senderName || null,
         senderEmail: form.senderEmail || null
       });
-      setForm({ name: '', senderName: '', senderEmail: '' });
-      toast('Company created');
+      setForm({ name: '', description: '', senderName: '', senderEmail: '' });
+      toast('Workspace created');
       refresh();
     } catch (err) {
       toast(apiError(err), 'err');
@@ -177,18 +179,24 @@ export default function Companies() {
     <>
       <div className="page-head">
         <div>
-          <h1>Companies</h1>
-          <p className="muted">Separate sending identities (e.g. MickAI, Cryptool), each with their own emails and templates.</p>
+          <h1>Workspaces</h1>
+          <p className="muted">Each workspace is a brand (e.g. MickAI, Cryptool) with its own documents, templates, and connected sending mailbox.</p>
         </div>
       </div>
 
       <form className="card mb" onSubmit={create}>
-        <h2>New company</h2>
+        <h2>New workspace</h2>
         <div className="row">
           <div className="field">
-            <label>Company name</label>
+            <label>Workspace name</label>
             <input className="input" value={form.name} onChange={set('name')} placeholder="e.g. MickAI" />
           </div>
+          <div className="field">
+            <label>Description</label>
+            <input className="input" value={form.description} onChange={set('description')} placeholder="e.g. Sovereign AI Operating System" />
+          </div>
+        </div>
+        <div className="row">
           <div className="field">
             <label>Sender name</label>
             <input className="input" value={form.senderName} onChange={set('senderName')} placeholder="MickAI Team" />
@@ -199,12 +207,12 @@ export default function Companies() {
           </div>
         </div>
         <button className="btn primary" disabled={busy}>
-          Create company
+          Create workspace
         </button>
       </form>
 
       {companies.length === 0 ? (
-        <div className="empty">No companies yet. Create one to send as a distinct brand.</div>
+        <div className="empty">No workspaces yet. Create one per brand to send from its own address.</div>
       ) : (
         companies.map((c) => <CompanyCard key={c.id} company={c} providers={providers} onChanged={refresh} />)
       )}

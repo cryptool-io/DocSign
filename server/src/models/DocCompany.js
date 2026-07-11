@@ -18,6 +18,7 @@ module.exports = (sequelize, DataTypes) => {
     {
       OwnerId: { type: DataTypes.UUID, allowNull: false },
       Name: { type: DataTypes.STRING, allowNull: false },
+      Description: { type: DataTypes.TEXT, allowNull: true },
       Slug: { type: DataTypes.STRING, allowNull: false, unique: true },
       SenderName: { type: DataTypes.STRING, allowNull: true },
       SenderEmail: {

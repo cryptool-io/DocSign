@@ -16,7 +16,6 @@ export default function SendEnvelope() {
   const loc = useLocation();
   const toast = useToast();
 
-  const [projects, setProjects] = useState([]);
   const [docs, setDocs] = useState([]);
   const [templates, setTemplates] = useState([]);
   const [recipients, setRecipients] = useState([]);
@@ -25,7 +24,6 @@ export default function SendEnvelope() {
   const [sending, setSending] = useState(false);
 
   const { companies, activeId } = useCompany();
-  const [projectId, setProjectId] = useState('');
   const [documentId, setDocumentId] = useState(loc.state?.documentId || '');
   const [templateId, setTemplateId] = useState('');
   const [companyId, setCompanyId] = useState(activeId || '');
@@ -47,14 +45,12 @@ export default function SendEnvelope() {
 
   useEffect(() => {
     (async () => {
-      const [p, d, t, r, g] = await Promise.all([
-        api.get('/projects'),
+      const [d, t, r, g] = await Promise.all([
         api.get('/documents'),
         api.get('/templates'),
         api.get('/recipients'),
         api.get('/recipient-groups')
       ]);
-      setProjects(p.data.data);
       setDocs(d.data.data);
       setTemplates(t.data.data);
       setRecipients(r.data.data);
@@ -121,7 +117,8 @@ export default function SendEnvelope() {
     setFromEmail(def ? def.email : '');
   }, [companyId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const filteredDocs = projectId ? docs.filter((d) => d.DocProjectId === projectId) : docs;
+  // Show documents belonging to the chosen workspace (or all when none chosen).
+  const filteredDocs = companyId ? docs.filter((d) => d.DocCompanyId === companyId) : docs;
   const setSigner = (i, k, v) => setSigners((s) => s.map((row, idx) => (idx === i ? { ...row, [k]: v } : row)));
   const addSigner = () => setSigners((s) => [...s, { name: '', email: '', signerRole: '', signingOrder: s.length + 1 }]);
   const removeSigner = (i) => setSigners((s) => s.filter((_, idx) => idx !== i));
@@ -174,7 +171,6 @@ export default function SendEnvelope() {
       const { data } = await api.post('/envelopes', {
         documentId,
         templateId: templateId || null,
-        projectId: projectId || null,
         companyId: companyId || null,
         fromEmail: fromEmail || null,
         deliveryMode,
@@ -265,7 +261,7 @@ export default function SendEnvelope() {
       <div className="page-head">
         <div>
           <h1>Send for signature</h1>
-          <p className="muted">Select a company, document, and template, then choose who needs to sign.</p>
+          <p className="muted">Select a workspace, document, and template, then choose who needs to sign.</p>
         </div>
       </div>
 
@@ -273,23 +269,12 @@ export default function SendEnvelope() {
         <h2>1 · Document</h2>
         <div className="row">
           <div className="field">
-            <label>Company</label>
+            <label>Workspace</label>
             <select className="select" value={companyId} onChange={(e) => setCompanyId(e.target.value)}>
-              <option value="">Personal (no company)</option>
+              <option value="">No workspace (personal)</option>
               {companies.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div className="field">
-            <label>Project</label>
-            <select className="select" value={projectId} onChange={(e) => setProjectId(e.target.value)}>
-              <option value="">All projects</option>
-              {projects.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.Name}
                 </option>
               ))}
             </select>
@@ -489,7 +474,7 @@ export default function SendEnvelope() {
         </div>
         {noSendableMailbox && (
           <p className="badge amber" style={{ display: 'inline-block' }}>
-            No connected mailbox for this company. Connect Gmail/Outlook under Companies, or use a share link instead.
+            No connected mailbox for this workspace. Connect Gmail/Outlook under Workspaces, or use a share link instead.
           </p>
         )}
         {deliveryMode === 'link' ? (

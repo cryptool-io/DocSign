@@ -5,6 +5,7 @@ const { slugify } = require('../utils/misc');
 const serialize = (company) => ({
   id: company.id,
   name: company.Name,
+  description: company.Description,
   slug: company.Slug,
   senderName: company.SenderName,
   senderEmail: company.SenderEmail,
@@ -49,7 +50,7 @@ exports.get = asyncHandler(async (req, res) => {
 });
 
 exports.create = asyncHandler(async (req, res) => {
-  const { name, senderName, senderEmail, replyToEmail, logoUrl, emails } = req.body;
+  const { name, description, senderName, senderEmail, replyToEmail, logoUrl, emails } = req.body;
   let slug = slugify(name);
   if (await DocCompany.findOne({ where: { Slug: slug } })) slug = `${slug}-${Date.now().toString(36).slice(-4)}`;
 
@@ -58,6 +59,7 @@ exports.create = asyncHandler(async (req, res) => {
       {
         OwnerId: req.userId,
         Name: name,
+        Description: description || null,
         Slug: slug,
         SenderName: senderName || name,
         SenderEmail: senderEmail || null,
@@ -88,9 +90,10 @@ exports.create = asyncHandler(async (req, res) => {
 exports.update = asyncHandler(async (req, res) => {
   const company = await withEmails(req.params.id, req.userId);
   if (!company) throw notFound('Company not found');
-  const { name, senderName, senderEmail, replyToEmail, logoUrl } = req.body;
+  const { name, description, senderName, senderEmail, replyToEmail, logoUrl } = req.body;
   await company.update({
     Name: name ?? company.Name,
+    Description: description === undefined ? company.Description : description,
     SenderName: senderName === undefined ? company.SenderName : senderName,
     SenderEmail: senderEmail === undefined ? company.SenderEmail : senderEmail,
     ReplyToEmail: replyToEmail === undefined ? company.ReplyToEmail : replyToEmail,

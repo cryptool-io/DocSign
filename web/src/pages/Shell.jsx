@@ -12,8 +12,7 @@ const links = [
   { to: '/data-rooms', label: 'Data rooms' },
   { to: '/templates', label: 'Templates' },
   { to: '/recipients', label: 'Recipients' },
-  { to: '/projects', label: 'Projects' },
-  { to: '/companies', label: 'Companies' },
+  { to: '/workspaces', label: 'Workspaces' },
   { to: '/settings', label: 'Settings' }
 ];
 
@@ -55,7 +54,7 @@ export default function Shell() {
               value={activeId || ''}
               onChange={(e) => setActive(e.target.value || null)}
             >
-              <option value="">All companies</option>
+              <option value="">All workspaces</option>
               {companies.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.name}

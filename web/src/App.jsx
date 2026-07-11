@@ -9,7 +9,6 @@ import Register from './pages/Register.jsx';
 import Shell from './pages/Shell.jsx';
 import Dashboard from './pages/Dashboard.jsx';
 import Documents from './pages/Documents.jsx';
-import Projects from './pages/Projects.jsx';
 import Recipients from './pages/Recipients.jsx';
 import Templates from './pages/Templates.jsx';
 import TemplateEditor from './pages/TemplateEditor.jsx';
@@ -19,7 +18,7 @@ import EnvelopeDetail from './pages/EnvelopeDetail.jsx';
 import SendEnvelope from './pages/SendEnvelope.jsx';
 import Settings from './pages/Settings.jsx';
 import DataRooms from './pages/DataRooms.jsx';
-import Companies from './pages/Companies.jsx';
+import Workspaces from './pages/Companies.jsx';
 import Inbox from './pages/Inbox.jsx';
 import PublicDataRoom from './pages/public/PublicDataRoom.jsx';
 
@@ -64,7 +63,8 @@ export default function App() {
         >
           <Route index element={<Dashboard />} />
           <Route path="documents" element={<Documents />} />
-          <Route path="projects" element={<Projects />} />
+          <Route path="workspaces" element={<Workspaces />} />
+          <Route path="projects" element={<Navigate to="/workspaces" replace />} />
           <Route path="recipients" element={<Recipients />} />
           <Route path="templates" element={<Templates />} />
           <Route path="templates/:id" element={<TemplateEditor />} />
@@ -74,7 +74,7 @@ export default function App() {
           <Route path="envelopes/:id" element={<EnvelopeDetail />} />
           <Route path="send" element={<SendEnvelope />} />
           <Route path="data-rooms" element={<DataRooms />} />
-          <Route path="companies" element={<Companies />} />
+          <Route path="companies" element={<Navigate to="/workspaces" replace />} />
           <Route path="inbox" element={<Inbox />} />
           <Route path="settings" element={<Settings />} />
         </Route>

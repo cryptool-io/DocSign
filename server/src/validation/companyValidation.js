@@ -8,6 +8,7 @@ const emailEntry = Joi.object({
 
 const create = Joi.object({
   name: Joi.string().min(1).max(160).trim().required(),
+  description: Joi.string().max(2000).allow('', null),
   senderName: Joi.string().max(160).allow('', null),
   senderEmail: Joi.string().email().max(254).lowercase().trim().allow('', null),
   replyToEmail: Joi.string().email().max(254).lowercase().trim().allow('', null),
@@ -17,6 +18,7 @@ const create = Joi.object({
 
 const update = Joi.object({
   name: Joi.string().min(1).max(160).trim(),
+  description: Joi.string().max(2000).allow('', null),
   senderName: Joi.string().max(160).allow('', null),
   senderEmail: Joi.string().email().max(254).lowercase().trim().allow('', null),
   replyToEmail: Joi.string().email().max(254).lowercase().trim().allow('', null),

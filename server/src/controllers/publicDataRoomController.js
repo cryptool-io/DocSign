@@ -100,7 +100,8 @@ exports.open = asyncHandler(async (req, res) => {
         id: it.DocDocumentId,
         label: it.Label || it.Document?.Name,
         folder: it.Folder || null,
-        pageCount: it.Document?.PageCount || 0
+        pageCount: it.Document?.PageCount || 0,
+        encrypted: Boolean(it.Document?.Encrypted)
       }))
     }
   });
@@ -133,6 +134,15 @@ exports.file = asyncHandler(async (req, res) => {
   await ensureSession(room, req.params.documentId, payload.email, req);
 
   let buffer = await storage.getObject(item.Document.FileKey);
+
+  if (item.Document.Encrypted) {
+    // Zero-knowledge: stream ciphertext; the viewer decrypts with the key from
+    // the room link fragment and watermarks client-side.
+    res.setHeader('Content-Type', 'application/octet-stream');
+    res.setHeader('X-Docsign-Encrypted', 'true');
+    return res.send(buffer);
+  }
+
   if (room.Watermark) {
     const mark = payload.email || `Confidential • ${new Date().toISOString().slice(0, 10)}`;
     buffer = await pdf.applyWatermark(buffer, mark);

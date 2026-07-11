@@ -1,6 +1,20 @@
 import { useEffect, useState } from 'react';
 import api, { apiError } from '../lib/api.js';
+import { documentKeyB64 } from '../lib/keystore.js';
+import { appendKeyMap } from '../lib/linkkey.js';
 import { Spinner, useToast, fmtDate, fmtDuration } from '../lib/ui.jsx';
+
+// Build a room's shareable URL, embedding a {documentId: dek} key map in the
+// fragment for any encrypted documents so recipients can decrypt them.
+const roomShareUrl = async (room) => {
+  const encItems = (room.items || []).filter((it) => it.encrypted && it.wrappedDek);
+  if (encItems.length === 0) return room.url;
+  const map = {};
+  for (const it of encItems) {
+    map[it.documentId] = await documentKeyB64(it.wrappedDek);
+  }
+  return appendKeyMap(room.url, map);
+};
 
 function RoomModal({ docs, existing, onClose, onSaved }) {
   const toast = useToast();
@@ -243,9 +257,14 @@ export default function DataRooms() {
                     <div className="wrap-actions" style={{ justifyContent: 'flex-end' }}>
                       <button
                         className="btn sm primary"
-                        onClick={() => {
-                          navigator.clipboard?.writeText(r.url);
-                          toast('Link copied');
+                        onClick={async () => {
+                          try {
+                            const url = await roomShareUrl(r);
+                            navigator.clipboard?.writeText(url);
+                            toast('Link copied');
+                          } catch {
+                            toast('Could not build the encrypted link', 'err');
+                          }
                         }}
                       >
                         Copy link

@@ -10,6 +10,7 @@
     "dev:server": "npm --prefix server run dev",
     "dev:web": "npm --prefix web run dev",
     "migrate": "npm --prefix server run migrate",
+    "test": "node tests/run.mjs",
     "check": "node --check server/src/app.js",
     "deploy:pm2": "npm run install:all && npm --prefix server run migrate && npm run build && pm2 restart docsign-server || pm2 start ecosystem.config.cjs"
   },

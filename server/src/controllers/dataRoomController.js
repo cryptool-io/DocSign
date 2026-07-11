@@ -26,7 +26,9 @@ const serialize = (room, items) => {
         folder: it.Folder || null,
         sortOrder: it.SortOrder,
         pageCount: it.Document?.PageCount,
-        sizeBytes: it.Document?.SizeBytes
+        sizeBytes: it.Document?.SizeBytes,
+        encrypted: Boolean(it.Document?.Encrypted),
+        wrappedDek: it.Document?.WrappedDek || null
       }))
   };
 };

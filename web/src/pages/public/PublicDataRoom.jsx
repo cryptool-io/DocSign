@@ -2,6 +2,8 @@ import { useEffect, useRef, useState, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
 import axios from 'axios';
 import { Document, Page } from '../../lib/pdf.js';
+import { decryptToBlob } from '../../lib/keystore.js';
+import { keyMapFromHash } from '../../lib/linkkey.js';
 import { Spinner } from '../../lib/ui.jsx';
 
 const pub = axios.create({ baseURL: '/api' });
@@ -50,10 +52,18 @@ export default function PublicDataRoom() {
     visiblePage.current = 1;
     pub
       .get(`/room/room/${session.roomId}/document/${activeDoc.id}/file`, {
-        responseType: 'blob',
+        responseType: 'arraybuffer',
         headers: { Authorization: `Bearer ${session.roomToken}` }
       })
-      .then((r) => setPdfUrl(URL.createObjectURL(r.data)))
+      .then(async (r) => {
+        if (r.headers['x-docsign-encrypted'] === 'true') {
+          const dekB64 = keyMapFromHash()[activeDoc.id];
+          if (!dekB64) return setError('This link is missing the decryption key for that document.');
+          setPdfUrl(URL.createObjectURL(await decryptToBlob(r.data, dekB64)));
+        } else {
+          setPdfUrl(URL.createObjectURL(new Blob([r.data], { type: 'application/pdf' })));
+        }
+      })
       .catch(() => setError('Could not load that document.'));
   }, [session, activeDoc]);
 

@@ -8,3 +8,5 @@ web/dist/
 .DS_Store
 coverage/
 tmp/
+
+tests/.server.out.log

@@ -67,4 +67,20 @@ npm run build && npm start   # everything on :4400
 With `MAIL_HOST` blank, all emails (verification, OTP codes, signature requests) are
 printed to the server console instead of sent — handy for local testing.
 
+## Tests
+
+An end-to-end suite lives in [`tests/`](./tests) and runs against a real database.
+It covers the crypto primitives + browser↔server interop, OAuth email mechanics,
+the full sender+signer journey (sequential multi-signer, share-link viewing,
+completion, audit, inbox attribution, OTP guard, decline), zero-knowledge document
+encryption (decrypt-to-stamp), and encrypted data rooms.
+
+```bash
+createdb docsign && npm run migrate   # once
+npm test                              # boots the API if needed, runs every suite
+```
+
+CI (GitHub Actions, [.github/workflows/ci.yml](./.github/workflows/ci.yml)) spins up
+Postgres, migrates, runs the suite, and builds the SPA on every push and PR.
+
 See [DEPLOY.md](./DEPLOY.md) for the ronserver2 (PM2 + nginx + certbot) setup.

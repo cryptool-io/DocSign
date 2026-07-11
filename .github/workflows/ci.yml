@@ -1,0 +1,69 @@
+name: CI
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: docsign
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      NODE_ENV: development
+      DB_HOST: localhost
+      DB_PORT: 5432
+      DB_NAME: docsign
+      DB_USER: postgres
+      DB_PASSWORD: postgres
+      # Deterministic dev secrets — CI only, never used for real data.
+      JWT_ACCESS_SECRET: ci-access-secret
+      JWT_REFRESH_SECRET: ci-refresh-secret
+      DOCROOM_VIEWER_SECRET: ci-viewer-secret
+      DOCROOM_STORAGE_DRIVER: local
+      DOCROOM_LOCAL_STORAGE_PATH: ./storage/docroom
+      APP_BASE_URL: http://localhost:4400
+      # Fake OAuth app so the mechanics suite can build authorize URLs.
+      GOOGLE_CLIENT_ID: ci-google-client-id
+      GOOGLE_CLIENT_SECRET: ci-google-secret
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install server dependencies
+        run: npm --prefix server ci || npm --prefix server install
+
+      - name: Syntax check
+        run: npm run check
+
+      - name: Run database migrations
+        run: npm --prefix server run migrate
+
+      - name: Run test suite
+        run: npm test
+
+      # Build the SPA too, so a broken frontend fails CI.
+      - name: Install web dependencies
+        run: npm --prefix web ci || npm --prefix web install
+
+      - name: Build web
+        run: npm --prefix web run build

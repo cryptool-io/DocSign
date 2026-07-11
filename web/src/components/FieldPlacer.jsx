@@ -71,6 +71,7 @@ function PageOverlay({ pageNumber, fields, onAdd, onMove, onRemove, onSelect, se
             <div
               key={f._id}
               onMouseDown={(e) => startDrag(e, f)}
+              onClick={(e) => { e.stopPropagation(); onSelect(f._id); }}
               style={{
                 position: 'absolute',
                 left: `${f.x * 100}%`,
@@ -149,7 +150,9 @@ export default function FieldPlacer({ documentId, doc, fields, setFields, active
       }
     ]);
     setSelectedId(_id); // select the new field so its options show immediately
-    if (setActiveType) setActiveType(null); // leave "place" mode so the next click selects/moves, not adds
+    // Stay in "place" mode so you can drop several of the same type (e.g. a date
+    // for each signer). Clicking an existing field selects it (stopPropagation);
+    // click the field-type button again to stop placing.
   };
   const moveField = (id, pos) => setFields((cur) => cur.map((f) => (f._id === id ? { ...f, ...pos } : f)));
   const patchField = (id, patch) => setFields((cur) => cur.map((f) => (f._id === id ? { ...f, ...patch } : f)));

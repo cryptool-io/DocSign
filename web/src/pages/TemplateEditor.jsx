@@ -64,6 +64,7 @@ function PageCanvas({ pageNumber, width, fields, activeType, colorFor, labelFor,
               key={f._id}
               className="field-box"
               onMouseDown={(e) => startDrag(e, f)}
+              onClick={(e) => { e.stopPropagation(); onSelect(f._id); }}
               style={{
                 left: `${f.x * 100}%`,
                 top: `${f.y * 100}%`,
@@ -172,7 +173,9 @@ export default function TemplateEditor() {
       }
     ]);
     setSelectedId(_id);
-    setActiveType(null);
+    // Stay in place mode so you can drop several of the same type (e.g. a date
+    // for each signer). Click an existing field to select it; click the field
+    // button again to stop placing.
   };
   // Changing the text size also resizes the box so it matches the stamped text.
   const setFieldFontSize = (fid, fs) => patchField(fid, { fontSize: fs, height: heightForFont(fs) });

@@ -260,19 +260,6 @@ export default function TemplateEditor() {
         </div>
       </div>
 
-      {/* 2 · Fields toolbar */}
-      <div className="card mb">
-        <div className="flex" style={{ flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
-          <span className="muted">Add field for <strong style={{ color: colorFor(activeSigner) }}>{signerLabel(activeSigner)}</strong>:</span>
-          {FIELD_TYPES.map((ft) => (
-            <button key={ft.type} className={`btn sm ${activeType === ft.type ? 'primary' : ''}`} onClick={() => setActiveType(activeType === ft.type ? null : ft.type)}>
-              {ft.label}
-            </button>
-          ))}
-          {activeType && <span className="badge blue">Click on the page to place</span>}
-        </div>
-      </div>
-
       {!pdfData ? (
         <div className="empty">Choose a source document to place fields.</div>
       ) : (
@@ -298,8 +285,23 @@ export default function TemplateEditor() {
             </Document>
           </div>
 
-          {/* Field settings — pinned right so they stay in view while scrolling. */}
-          <div style={{ width: 290, flexShrink: 0, position: 'sticky', top: 12, alignSelf: 'flex-start' }}>
+          {/* Add-field palette + field settings — pinned right so they stay in
+              view while scrolling through the pages. */}
+          <div style={{ width: 290, flexShrink: 0, position: 'sticky', top: 12, alignSelf: 'flex-start', display: 'flex', flexDirection: 'column', gap: 12 }}>
+            <div className="card" style={{ background: 'var(--panel, #fafafa)', textAlign: 'left' }}>
+              <div className="muted" style={{ fontSize: 13, marginBottom: 8 }}>
+                Add field for <strong style={{ color: colorFor(activeSigner) }}>{signerLabel(activeSigner)}</strong>
+              </div>
+              <div className="flex" style={{ flexWrap: 'wrap', gap: 6 }}>
+                {FIELD_TYPES.map((ft) => (
+                  <button key={ft.type} className={`btn sm ${activeType === ft.type ? 'primary' : ''}`} onClick={() => setActiveType(activeType === ft.type ? null : ft.type)}>
+                    {ft.label}
+                  </button>
+                ))}
+              </div>
+              {activeType && <div className="badge blue" style={{ marginTop: 8, display: 'inline-block' }}>Click on the page to place</div>}
+            </div>
+
             <div className="card" style={{ background: 'var(--panel, #fafafa)', textAlign: 'left' }}>
               {selected ? (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>

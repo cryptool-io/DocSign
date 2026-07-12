@@ -12,6 +12,7 @@ export default function PublicSign() {
   const { token } = useParams();
   const [meta, setMeta] = useState(null);
   const [error, setError] = useState(null);
+  const [showErrors, setShowErrors] = useState(false);
   const [stage, setStage] = useState('loading'); // loading | otp | sign | done | declined
   const [otpSentTo, setOtpSentTo] = useState('');
   const [code, setCode] = useState('');
@@ -36,6 +37,19 @@ export default function PublicSign() {
   // signers' fields are shown read-only for context.
   const hasSignatureFields = fields.some((f) => f.type === 'signature' && f.mine);
   const hasInitialsFields = fields.some((f) => f.type === 'initials' && f.mine);
+
+  // Your required fields that are still empty (signature/initials handled by the
+  // adopt controls). Recomputed live, so the red clears as you fill them.
+  const missingIds = new Set(
+    fields
+      .filter((f) => {
+        if (!f.mine || f.required === false) return false;
+        if (['signature', 'initials'].includes(f.type)) return false;
+        if (f.type === 'checkbox') return !values[f.id];
+        return !(values[f.id] && String(values[f.id]).trim());
+      })
+      .map((f) => f.id)
+  );
 
   // Required signature style set by the sender: 'draw' (must hand-draw), 'type'
   // (typed name only), or 'any'. Draw wins if fields disagree.
@@ -153,6 +167,10 @@ export default function PublicSign() {
     if (hasSignatureFields && sigMode === 'type' && !typedName.trim()) return setError('Please type your full name to use as your signature.');
     if (hasInitialsFields && initMode === 'draw' && !drawnInitials) return setError('Please draw your initials, or switch to Type.');
     if (hasInitialsFields && initMode === 'type' && !typedInitials.trim()) return setError('Please enter your initials.');
+    if (missingIds.size > 0) {
+      setShowErrors(true);
+      return setError(`Please complete the ${missingIds.size} required field${missingIds.size > 1 ? 's' : ''} highlighted in red.`);
+    }
     setBusy(true);
     setError(null);
     try {
@@ -358,6 +376,12 @@ export default function PublicSign() {
         <Spinner center />
       ) : (
         <div style={{ textAlign: 'center' }}>
+          {fields.some((f) => !f.mine) && (
+            <div className="flex" style={{ gap: 16, justifyContent: 'center', marginBottom: 10, fontSize: 12 }}>
+              <span><span style={{ display: 'inline-block', width: 12, height: 12, border: '2px dashed var(--warn)', background: 'rgba(217,119,6,.08)', verticalAlign: 'middle', marginRight: 4 }} /> Your fields to fill</span>
+              <span><span style={{ display: 'inline-block', width: 12, height: 12, border: '2px solid #cbd5e1', background: 'rgba(100,116,139,.08)', verticalAlign: 'middle', marginRight: 4 }} /> Other signer’s fields</span>
+            </div>
+          )}
           <Document file={pdfUrl} onLoadSuccess={({ numPages: n }) => setNumPages(n)} loading={<Spinner center />}>
             {Array.from({ length: numPages }, (_, i) => (
               <div key={i} className="pdf-page-wrap pdf-stage">
@@ -374,10 +398,11 @@ export default function PublicSign() {
                       : f.type === 'checkbox'
                       ? values[f.id]
                       : !!values[f.id];
+                    const isMissing = f.mine && showErrors && missingIds.has(f.id);
                     return (
                       <div
                         key={f.id}
-                        className={`sign-field ${filled ? 'done' : ''}`}
+                        className={`sign-field ${filled ? 'done' : ''} ${!f.mine ? 'readonly' : ''} ${isMissing ? 'missing' : ''}`}
                         style={{ left: `${f.x * 100}%`, top: `${f.y * 100}%`, width: `${f.width * 100}%`, height: `${f.height * 100}%`, ...(f.mine ? {} : { cursor: 'default' }) }}
                         title={f.mine ? undefined : f.byName ? `Filled by ${f.byName}` : 'Filled by another signer'}
                       >
@@ -414,10 +439,17 @@ export default function PublicSign() {
                         ) : (
                           <input
                             className="input"
-                            style={{ padding: 2, height: '100%', fontSize: 12 }}
+                            style={{
+                              padding: 2,
+                              height: '100%',
+                              fontSize: 12,
+                              background: 'transparent',
+                              border: 'none',
+                              ...(isMissing ? { color: '#dc2626' } : {})
+                            }}
                             value={values[f.id] || ''}
                             onChange={(e) => setValues((v) => ({ ...v, [f.id]: e.target.value }))}
-                            placeholder={f.label || 'text'}
+                            placeholder={isMissing ? `${f.label || 'text'} — required` : f.label || 'text'}
                           />
                         )}
                       </div>

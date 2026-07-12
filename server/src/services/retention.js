@@ -85,6 +85,7 @@ async function purgeEnvelopeStorage(envelopeId) {
   if (doc && doc.Encrypted) return { completed: false, source: false };
 
   let completed = false;
+  let source = false;
 
   if (env.CompletedFileKey) {
     await storage.deleteObject(env.CompletedFileKey).catch(() => {});
@@ -92,11 +93,23 @@ async function purgeEnvelopeStorage(envelopeId) {
     completed = true;
   }
 
-  // NB: we deliberately do NOT purge the source document here. Documents can be
-  // reused across multiple sends, and they also back DocSend share links and data
-  // rooms. Making source PDFs ephemeral belongs to the upload-per-send / overlay
-  // library refactor, where the whole flow is consistent.
-  return { completed, source: false };
+  // Sovereign documents: drop the transiently-attached bytes so the PDF returns to
+  // living only on the user's device. The overlay shell (hash + fields) stays.
+  // Guard against a concurrent active send of the same document.
+  if (doc && doc.StorageMode === 'sovereign' && doc.FileKey) {
+    const otherActive = await DocEnvelope.count({
+      where: { DocDocumentId: doc.id, id: { [Op.ne]: env.id }, Status: { [Op.notIn]: TERMINAL } }
+    });
+    if (otherActive === 0) {
+      await storage.deleteObject(doc.FileKey).catch(() => {});
+      await doc.update({ FileKey: null });
+      source = true;
+    }
+  }
+
+  // NB: STORED documents are deliberately left in place — they're reusable and also
+  // back DocSend links + data rooms.
+  return { completed, source };
 }
 
 /** Sweep any terminal envelope still holding PDF bytes (stragglers). */
@@ -114,6 +127,30 @@ async function purgeTerminalEnvelopeFiles() {
   return n;
 }
 
+/**
+ * Sweep sovereign documents that still have transient bytes attached but no active
+ * envelope needing them (e.g. after a decline/void, or an attach that never sent).
+ * The 1-hour guard on updatedAt ensures we never race an in-progress attach→send.
+ */
+async function purgeSovereignLeftovers() {
+  const cutoff = new Date(Date.now() - 60 * 60 * 1000);
+  const docs = await DocDocument.findAll({
+    where: { StorageMode: 'sovereign', FileKey: { [Op.ne]: null }, updatedAt: { [Op.lt]: cutoff } },
+    attributes: ['id', 'FileKey'],
+    limit: 500
+  });
+  let n = 0;
+  for (const doc of docs) {
+    const active = await DocEnvelope.count({ where: { DocDocumentId: doc.id, Status: { [Op.notIn]: TERMINAL } } });
+    if (active === 0) {
+      await storage.deleteObject(doc.FileKey).catch(() => {});
+      await doc.update({ FileKey: null });
+      n += 1;
+    }
+  }
+  return n;
+}
+
 /** Entry point for the scheduler — logs a one-line summary, never throws. */
 async function runRetention() {
   try {
@@ -121,6 +158,8 @@ async function runRetention() {
     if (purged) console.log(`[retention] purged ${purged} abandoned draft envelope(s) older than ${DRAFT_DAYS}d`);
     const files = await purgeTerminalEnvelopeFiles();
     if (files) console.log(`[retention] purged stored PDFs for ${files} completed envelope(s)`);
+    const sov = await purgeSovereignLeftovers();
+    if (sov) console.log(`[retention] purged transient bytes for ${sov} sovereign document(s)`);
   } catch (err) {
     console.error('[retention] sweep failed:', err.message);
   }

@@ -8,7 +8,7 @@ import { BASE, SERVER_DIR } from './_harness.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
-const SUITES = ['crypto.test.mjs', 'oauth.test.mjs', 'journey.test.mjs', 'encryption.test.mjs', 'rooms-enc.test.mjs'];
+const SUITES = ['crypto.test.mjs', 'oauth.test.mjs', 'journey.test.mjs', 'encryption.test.mjs', 'rooms-enc.test.mjs', 'sovereign.test.mjs'];
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 const isUp = async () => {

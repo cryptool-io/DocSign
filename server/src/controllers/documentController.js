@@ -22,7 +22,46 @@ exports.list = asyncHandler(async (req, res) => {
   res.json({ data: rows, meta: meta(count, { page, pageSize }) });
 });
 
+// Resolve the workspace a new document belongs to (explicit companyId, else the
+// project's company).
+const resolveUploadCompany = async (req) => {
+  let inheritedCompanyId = null;
+  if (req.body.projectId) {
+    const project = await DocProject.findOne({ where: { id: req.body.projectId, OwnerId: req.userId } });
+    if (!project) throw badRequest('Project not found.', 'bad_project');
+    inheritedCompanyId = project.DocCompanyId;
+  }
+  return req.body.companyId ? await resolveCompanyId(req.userId, req.body.companyId) : inheritedCompanyId;
+};
+
 exports.upload = asyncHandler(async (req, res) => {
+  const storageMode = req.body.storageMode === 'sovereign' ? 'sovereign' : 'stored';
+
+  // Sovereign: the PDF stays on the user's device. No bytes are persisted here —
+  // the browser sends only metadata (it computed the hash + page count locally).
+  // The file is attached transiently at send time (POST /documents/:id/attach).
+  if (storageMode === 'sovereign') {
+    const claimedSha = String(req.body.sha256 || '');
+    if (!/^[0-9a-f]{64}$/.test(claimedSha)) throw badRequest('Sovereign upload requires a valid sha256.', 'bad_sha');
+    const companyId = await resolveUploadCompany(req);
+    const doc = await DocDocument.create({
+      DocProjectId: req.body.projectId || null,
+      DocCompanyId: companyId,
+      OwnerId: req.userId,
+      Name: req.body.name || 'Untitled.pdf',
+      StorageDriver: storage.driverName,
+      StorageMode: 'sovereign',
+      FileKey: null,
+      MimeType: 'application/pdf',
+      SizeBytes: parseInt(req.body.sizeBytes || '0', 10) || 0,
+      PageCount: parseInt(req.body.pageCount || '0', 10) || 0,
+      Sha256: claimedSha,
+      Version: 1,
+      Encrypted: false
+    });
+    return res.status(201).json({ data: doc });
+  }
+
   if (!req.file) throw badRequest('No file uploaded. Send a PDF as multipart field "file".', 'no_file');
   const buffer = req.file.buffer;
 
@@ -48,26 +87,18 @@ exports.upload = asyncHandler(async (req, res) => {
     sha256 = storage.sha256(buffer);
   }
 
-  const { projectId, name } = req.body;
-  let inheritedCompanyId = null;
-  if (projectId) {
-    const project = await DocProject.findOne({ where: { id: projectId, OwnerId: req.userId } });
-    if (!project) throw badRequest('Project not found.', 'bad_project');
-    inheritedCompanyId = project.DocCompanyId;
-  }
-  const companyId = req.body.companyId
-    ? await resolveCompanyId(req.userId, req.body.companyId)
-    : inheritedCompanyId;
+  const companyId = await resolveUploadCompany(req);
 
   const key = storage.buildKey(`documents/${req.userId}`, `${req.file.originalname || 'document.pdf'}${isEncrypted ? '.enc' : ''}`);
   await storage.putObject(key, buffer, isEncrypted ? 'application/octet-stream' : 'application/pdf');
 
   const doc = await DocDocument.create({
-    DocProjectId: projectId || null,
+    DocProjectId: req.body.projectId || null,
     DocCompanyId: companyId,
     OwnerId: req.userId,
-    Name: name || req.file.originalname || 'Untitled.pdf',
+    Name: req.body.name || req.file.originalname || 'Untitled.pdf',
     StorageDriver: storage.driverName,
+    StorageMode: 'stored',
     FileKey: key,
     MimeType: 'application/pdf',
     SizeBytes: buffer.length,
@@ -80,6 +111,29 @@ exports.upload = asyncHandler(async (req, res) => {
   });
 
   res.status(201).json({ data: doc });
+});
+
+/**
+ * Attach transient bytes to a sovereign document immediately before sending. The
+ * file is verified against the hash on record, held only for the active signing
+ * window, and purged on completion — so the PDF never lives in our storage at rest.
+ */
+exports.attach = asyncHandler(async (req, res) => {
+  const doc = await DocDocument.findOne({ where: { id: req.params.id, OwnerId: req.userId } });
+  if (!doc) throw notFound('Document not found');
+  if (doc.StorageMode !== 'sovereign') throw badRequest('Only sovereign documents need a transient attach.', 'not_sovereign');
+  if (!req.file) throw badRequest('No file uploaded. Send the PDF as multipart field "file".', 'no_file');
+  const buffer = req.file.buffer;
+  if (!pdf.looksLikePdf(buffer)) throw badRequest('Only PDF files are supported.', 'not_pdf');
+  const sha = storage.sha256(buffer);
+  if (sha !== doc.Sha256) {
+    throw badRequest('This file does not match the document on record (fingerprint mismatch).', 'hash_mismatch');
+  }
+  if (doc.FileKey) await storage.deleteObject(doc.FileKey).catch(() => {}); // replace any stale transient copy
+  const key = storage.buildKey(`documents/${req.userId}`, `${doc.Name}.transient.pdf`);
+  await storage.putObject(key, buffer, 'application/pdf');
+  await doc.update({ FileKey: key, SizeBytes: buffer.length });
+  res.json({ data: { id: doc.id, attached: true } });
 });
 
 // Owner OR a member of the document's workspace may open/manage it.
@@ -106,9 +160,13 @@ exports.update = asyncHandler(async (req, res) => {
   res.json({ data: doc });
 });
 
+const NO_BYTES_MSG =
+  'This document is sovereign — the PDF lives on your device. Re-select the local file to preview or send it.';
+
 /** Owner-side page geometry — the field editor needs intrinsic page sizes. */
 exports.pageSizes = asyncHandler(async (req, res) => {
   const doc = await findOwned(req);
+  if (!doc.FileKey) throw badRequest(NO_BYTES_MSG, 'no_bytes');
   const buffer = await storage.getObject(doc.FileKey);
   res.json({ data: await pdf.getPageSizes(buffer) });
 });
@@ -116,6 +174,7 @@ exports.pageSizes = asyncHandler(async (req, res) => {
 /** Stream the raw PDF to the authenticated owner (for the editor/preview). */
 exports.download = asyncHandler(async (req, res) => {
   const doc = await findOwned(req);
+  if (!doc.FileKey) throw badRequest(NO_BYTES_MSG, 'no_bytes');
   const stream = await storage.getObjectStream(doc.FileKey);
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `inline; filename="${encodeURIComponent(doc.Name)}"`);

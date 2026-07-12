@@ -21,7 +21,11 @@ module.exports = (sequelize, DataTypes) => {
       OwnerId: { type: DataTypes.UUID, allowNull: false },
       Name: { type: DataTypes.STRING, allowNull: false },
       StorageDriver: { type: DataTypes.STRING, allowNull: false, defaultValue: 's3' },
-      FileKey: { type: DataTypes.STRING, allowNull: false },
+      // 'stored' = PDF kept in our storage; 'sovereign' = PDF stays on the user's
+      // device, we hold only the overlay + hash and hold bytes transiently at send.
+      StorageMode: { type: DataTypes.STRING, allowNull: false, defaultValue: 'stored' },
+      // Null for a sovereign shell with no bytes currently attached.
+      FileKey: { type: DataTypes.STRING, allowNull: true },
       MimeType: { type: DataTypes.STRING, allowNull: false, defaultValue: 'application/pdf' },
       SizeBytes: { type: DataTypes.BIGINT, allowNull: false, defaultValue: 0 },
       PageCount: { type: DataTypes.INTEGER, allowNull: false, defaultValue: 0 },

@@ -294,7 +294,7 @@ export default function Documents() {
               <tr>
                 <th>Document</th>
                 <th>Signing fields</th>
-                <th>Links</th>
+                <th title="Tracked view-only links you can share (via 'Share link') to see who opened the document and for how long">Share links</th>
                 <th>Uploaded</th>
                 <th />
               </tr>

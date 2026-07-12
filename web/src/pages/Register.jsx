@@ -42,7 +42,7 @@ export default function Register() {
           <input className="input" value={form.name} onChange={set('name')} required />
         </div>
         <div className="field">
-          <label>Work email</label>
+          <label>Email</label>
           <input className="input" type="email" value={form.email} onChange={set('email')} required />
         </div>
         <div className="field">

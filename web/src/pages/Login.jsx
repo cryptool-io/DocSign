@@ -41,6 +41,9 @@ export default function Login() {
         <div className="field">
           <label>Password</label>
           <input className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+          <p style={{ textAlign: 'right', margin: '6px 0 0' }}>
+            <Link to="/forgot-password" style={{ fontSize: 13 }}>Forgot password?</Link>
+          </p>
         </div>
         <button className="btn primary block" disabled={busy}>
           {busy ? 'Signing in…' : 'Sign in'}

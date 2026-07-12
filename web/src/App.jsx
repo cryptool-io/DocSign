@@ -23,6 +23,7 @@ import Workspaces from './pages/Companies.jsx';
 import Inbox from './pages/Inbox.jsx';
 import PublicDataRoom from './pages/public/PublicDataRoom.jsx';
 
+import ResetPassword from './pages/ResetPassword.jsx';
 import PublicView from './pages/public/PublicView.jsx';
 import PublicSign from './pages/public/PublicSign.jsx';
 
@@ -52,6 +53,8 @@ export default function App() {
         {/* Auth */}
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
+        <Route path="/forgot-password" element={<ResetPassword />} />
+        <Route path="/reset-password" element={<ResetPassword />} />
 
         {/* Sender app */}
         <Route

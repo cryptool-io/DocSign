@@ -8,6 +8,10 @@ import { Spinner } from '../../lib/ui.jsx';
 
 const pub = axios.create({ baseURL: '/api' });
 
+// The template (sender) sets the font per field; the signer just types into it.
+const fontFamilyFor = (font) =>
+  font === 'Times' ? 'Georgia, "Times New Roman", serif' : font === 'Courier' ? '"Courier New", monospace' : 'inherit';
+
 export default function PublicSign() {
   const { token } = useParams();
   const [meta, setMeta] = useState(null);
@@ -473,7 +477,7 @@ export default function PublicSign() {
                           ) : (
                             <input
                               className="input"
-                              style={{ padding: 2, height: '100%', fontSize: 12, textAlign: 'center' }}
+                              style={{ padding: 2, height: '100%', fontSize: f.fontSize || 12, fontFamily: fontFamilyFor(f.font), textAlign: 'center', background: 'transparent', border: 'none' }}
                               value={values[f.id] || ''}
                               onChange={(e) => setValues((v) => ({ ...v, [f.id]: e.target.value }))}
                               title="Signing date — you can edit it"
@@ -487,7 +491,8 @@ export default function PublicSign() {
                             style={{
                               padding: 2,
                               height: '100%',
-                              fontSize: 12,
+                              fontSize: f.fontSize || 12,
+                              fontFamily: fontFamilyFor(f.font),
                               background: 'transparent',
                               border: 'none',
                               ...(isMissing ? { color: '#dc2626' } : {})

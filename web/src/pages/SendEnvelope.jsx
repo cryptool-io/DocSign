@@ -61,6 +61,24 @@ export default function SendEnvelope() {
     })();
   }, []);
 
+  const reloadTemplates = () =>
+    api.get('/templates').then((t) => setTemplates(t.data.data)).catch(() => {});
+
+  // Delete the currently selected signing setup (with a confirm), then refresh.
+  const deleteSetup = async () => {
+    const tpl = templates.find((t) => t.id === templateId);
+    if (!tpl) return;
+    if (!window.confirm(`Delete signing setup "${tpl.Name}"? This cannot be undone. The document itself is not deleted.`)) return;
+    try {
+      await api.delete(`/templates/${tpl.id}`);
+      setTemplateId('');
+      await reloadTemplates();
+      toast('Signing setup deleted');
+    } catch (err) {
+      toast(apiError(err), 'err');
+    }
+  };
+
   // Apply the chosen DOCUMENT's own signing setup: its default saved setup (or the
   // only one). Signing setups are configured on the Documents page, so there's no
   // separate picker here — pick a document and its fields/roles load automatically.
@@ -763,6 +781,16 @@ export default function SendEnvelope() {
                   <option key={t.id} value={t.id}>{t.Name}{t.IsDefault ? ' (default)' : ''}</option>
                 ))}
               </select>
+            )}
+            {templateId && (
+              <>
+                <button className="btn sm" onClick={() => nav(`/templates/${templateId}`)} title="Edit this saved setup (fields, roles, message)">
+                  ✏️ Edit
+                </button>
+                <button className="btn sm danger" onClick={deleteSetup} title="Delete this saved setup">
+                  🗑 Delete
+                </button>
+              </>
             )}
             <button className="btn sm" onClick={saveAsTemplate} disabled={sending || !documentId} title="Save the fields, signer roles, subject and message as a reusable setup on this document">
               💾 Save as template

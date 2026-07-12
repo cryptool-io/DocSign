@@ -252,7 +252,10 @@ export default function Documents() {
       <div className="page-head">
         <div>
           <h1>Documents</h1>
-          <p className="muted">Upload PDFs, set up reusable signing fields, share tracked links, and send for signature.</p>
+          <p className="muted">
+            Upload PDFs, set up reusable signing fields, share tracked links, and send for signature. ·{' '}
+            <a href="#" onClick={(e) => { e.preventDefault(); nav('/trash'); }}>Trash</a>
+          </p>
         </div>
         <div className="flex" style={{ gap: 8, alignItems: 'center' }}>
           {companies.length > 0 && (

@@ -49,10 +49,19 @@ const withFields = async (id, userId) => {
 };
 
 exports.list = asyncHandler(async (req, res) => {
-  const where = { ...(await listScope(req.userId, req.query)), ArchivedAt: null };
+  const where = { ...(await listScope(req.userId, req.query)) };
+  where.ArchivedAt = req.query.archived === '1' ? { [Op.ne]: null } : null;
   if (req.query.projectId) where.DocProjectId = req.query.projectId;
   const templates = await DocTemplate.findAll({ where, order: [['updatedAt', 'DESC']] });
   res.json({ data: templates });
+});
+
+/** Restore an archived signing setup back into the document's list. */
+exports.restore = asyncHandler(async (req, res) => {
+  const tpl = await DocTemplate.findOne({ where: { id: req.params.id } });
+  if (!tpl || !(await canAccessRecord(req.userId, tpl))) throw notFound('Template not found');
+  await tpl.update({ ArchivedAt: null });
+  res.json({ ok: true });
 });
 
 exports.get = asyncHandler(async (req, res) => {

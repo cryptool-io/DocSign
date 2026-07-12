@@ -11,6 +11,7 @@ router.get('/', controller.list);
 router.post('/', validate(template.create), controller.create);
 router.get('/:id', validate(idParam, 'params'), controller.get);
 router.patch('/:id', validate(idParam, 'params'), validate(template.update), controller.update);
+router.post('/:id/restore', validate(idParam, 'params'), controller.restore);
 router.delete('/:id', validate(idParam, 'params'), controller.remove);
 
 module.exports = router;

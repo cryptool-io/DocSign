@@ -9,6 +9,7 @@ import Register from './pages/Register.jsx';
 import Shell from './pages/Shell.jsx';
 import Dashboard from './pages/Dashboard.jsx';
 import Documents from './pages/Documents.jsx';
+import Trash from './pages/Trash.jsx';
 import Recipients from './pages/Recipients.jsx';
 import Templates from './pages/Templates.jsx';
 import TemplateEditor from './pages/TemplateEditor.jsx';
@@ -62,6 +63,7 @@ export default function App() {
         >
           <Route index element={<Dashboard />} />
           <Route path="documents" element={<Documents />} />
+          <Route path="trash" element={<Trash />} />
           <Route path="workspaces" element={<Workspaces />} />
           <Route path="projects" element={<Navigate to="/workspaces" replace />} />
           <Route path="recipients" element={<Recipients />} />

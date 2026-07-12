@@ -407,9 +407,13 @@ export default function PublicSign() {
                         title={f.mine ? undefined : f.byName ? `Filled by ${f.byName}` : 'Filled by another signer'}
                       >
                         {!f.mine ? (
-                          <span style={{ fontSize: 12, fontFamily: f.type === 'signature' || f.type === 'initials' ? 'cursive' : 'inherit', overflow: 'hidden', whiteSpace: 'nowrap' }}>
-                            {f.type === 'checkbox' ? (f.value ? '☑' : '') : f.value || ''}
-                          </span>
+                          f.valueImage ? (
+                            <img src={f.valueImage} alt="signature" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
+                          ) : (
+                            <span style={{ fontSize: 12, fontFamily: f.type === 'signature' || f.type === 'initials' ? 'cursive' : 'inherit', overflow: 'hidden', whiteSpace: 'nowrap' }}>
+                              {f.type === 'checkbox' ? (f.value ? '☑' : '') : f.value || ''}
+                            </span>
+                          )
                         ) : f.type === 'signature' ? (
                           sigMode === 'draw' && drawn ? (
                             <img src={drawn} alt="signature" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />

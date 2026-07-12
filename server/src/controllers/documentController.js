@@ -1,4 +1,5 @@
 const { DocDocument, DocProject, DocLink, DocEnvelope } = require('../models');
+const { Op } = require('sequelize');
 const storage = require('../services/docroom/storage');
 const pdf = require('../services/docroom/pdf');
 const { asyncHandler, notFound, badRequest } = require('../utils/http');
@@ -8,7 +9,8 @@ const { listScope, canAccessRecord } = require('../utils/access');
 
 exports.list = asyncHandler(async (req, res) => {
   const { limit, offset, page, pageSize } = paginate(req.query);
-  const where = { ...(await listScope(req.userId, req.query)), ArchivedAt: null };
+  const where = { ...(await listScope(req.userId, req.query)) };
+  where.ArchivedAt = req.query.archived === '1' ? { [Op.ne]: null } : null;
   if (req.query.projectId) where.DocProjectId = req.query.projectId;
 
   const { rows, count } = await DocDocument.findAndCountAll({
@@ -99,6 +101,8 @@ exports.update = asyncHandler(async (req, res) => {
   if (req.body.companyId !== undefined) {
     await doc.update({ DocCompanyId: await resolveCompanyId(req.userId, req.body.companyId) });
   }
+  if (req.body.archived === false) await doc.update({ ArchivedAt: null }); // restore from trash
+  if (req.body.archived === true) await doc.update({ ArchivedAt: new Date() });
   res.json({ data: doc });
 });
 

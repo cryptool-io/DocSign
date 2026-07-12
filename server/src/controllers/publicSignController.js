@@ -264,17 +264,20 @@ exports.fields = asyncHandler(async (req, res) => {
   const { signer, env } = await authorizeSigner(req);
   const fields = await DocSignatureField.findAll({
     where: { DocEnvelopeId: env.id },
-    include: [{ model: DocEnvelopeSigner, as: 'Signer', attributes: ['id', 'Name', 'Status'] }],
+    include: [{ model: DocEnvelopeSigner, as: 'Signer', attributes: ['id', 'Name', 'Status', 'SignatureImageKey', 'InitialsImageKey'] }],
     order: [['PageNumber', 'ASC']]
   });
   res.json({
     data: fields.map((f) => {
       const mine = f.DocEnvelopeSignerId === signer.id;
-      // Represent a filled signature/initials for display (drawn images aren't
-      // inlined here; show the signer's name as the rendered value).
+      const signed = f.Signer?.Status === 'signed';
+      // For another signer's signature/initials, show their actual drawn image if
+      // they drew it, else their name as the rendered value.
       let value = f.Value;
-      if (!mine && (f.Type === 'signature' || f.Type === 'initials') && !value && f.Signer?.Status === 'signed') {
-        value = f.Signer?.Name || '✓';
+      let valueImage = null;
+      if (!mine && signed && (f.Type === 'signature' || f.Type === 'initials')) {
+        valueImage = f.Type === 'signature' ? f.Signer?.SignatureImageKey : f.Signer?.InitialsImageKey;
+        if (!valueImage && !value) value = f.Signer?.Name || '✓';
       }
       return {
         id: f.id,
@@ -292,6 +295,7 @@ exports.fields = asyncHandler(async (req, res) => {
         label: f.Label,
         mine,
         value: mine ? undefined : value || '',
+        valueImage: mine ? undefined : valueImage || null,
         byName: mine ? undefined : f.Signer?.Name || null
       };
     })

@@ -1,16 +1,42 @@
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import api, { apiError } from '../lib/api.js';
 import { useAuth } from '../lib/store.js';
 import { Spinner, useToast } from '../lib/ui.jsx';
 
 export default function Settings() {
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
+  const nav = useNavigate();
   const toast = useToast();
   const [version, setVersion] = useState(null);
   const [updating, setUpdating] = useState(false);
   const [steps, setSteps] = useState(null);
+  const [delPassword, setDelPassword] = useState('');
+  const [deleting, setDeleting] = useState(false);
 
   const isAdmin = user?.role === 'admin';
+
+  const deleteAccount = async () => {
+    if (!delPassword) return toast('Enter your password to confirm.', 'err');
+    if (!window.confirm(
+      'Permanently delete your account? This erases your personal data, saved recipients, and unsent drafts, and signs you out. ' +
+      'Completed signed agreements and their audit trail are kept for the legal retention period, as required by law. This cannot be undone.'
+    )) return;
+    setDeleting(true);
+    try {
+      const { data } = await api.delete('/auth/account', { data: { password: delPassword } });
+      const kept = data.retainedAgreements
+        ? ` ${data.retainedAgreements} completed agreement(s) retained for legal compliance.`
+        : '';
+      toast(`Account erased.${kept}`);
+      await logout();
+      nav('/login', { replace: true });
+    } catch (err) {
+      toast(apiError(err), 'err');
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   const loadVersion = () => api.get('/admin/version').then((r) => setVersion(r.data.data)).catch(() => setVersion({}));
   useEffect(() => {
@@ -118,6 +144,29 @@ export default function Settings() {
             </table>
           </div>
         )}
+      </div>
+
+      <div className="card mt" style={{ borderColor: '#e6b8b8' }}>
+        <h2 style={{ color: '#b42318' }}>Delete account</h2>
+        <p className="muted mb">
+          Erases your personal data — profile, saved recipients, and unsent drafts — and signs you out
+          permanently. Completed signed agreements and their audit trail are <strong>kept for the legal
+          retention period</strong>, as we're required to. This can't be undone.
+        </p>
+        <div className="field" style={{ maxWidth: 320 }}>
+          <label>Confirm your password</label>
+          <input
+            className="input"
+            type="password"
+            value={delPassword}
+            onChange={(e) => setDelPassword(e.target.value)}
+            placeholder="Your current password"
+            autoComplete="current-password"
+          />
+        </div>
+        <button className="btn danger" disabled={deleting} onClick={deleteAccount}>
+          {deleting ? 'Erasing…' : 'Delete my account'}
+        </button>
       </div>
     </>
   );

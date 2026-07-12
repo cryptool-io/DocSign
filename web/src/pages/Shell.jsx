@@ -68,8 +68,14 @@ export default function Shell() {
           Signed in as
           <div style={{ color: 'var(--text)', fontWeight: 600 }}>{user?.name}</div>
           <div>{user?.email}</div>
-          <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--border)', fontSize: 12, lineHeight: 1.6 }}>
-            <NavLink to="/legal" style={{ color: 'inherit' }}>Legal &amp; e-signature disclosure</NavLink>
+          <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid var(--border)', fontSize: 12, lineHeight: 1.7 }}>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: '2px 8px' }}>
+              <NavLink to="/legal" style={{ color: 'inherit' }}>Legal</NavLink>
+              <span style={{ opacity: 0.4 }}>·</span>
+              <NavLink to="/privacy" style={{ color: 'inherit' }}>Privacy</NavLink>
+              <span style={{ opacity: 0.4 }}>·</span>
+              <NavLink to="/dpa" style={{ color: 'inherit' }}>DPA</NavLink>
+            </div>
             <div style={{ opacity: 0.7 }}>© {new Date().getFullYear()} DocSign · Cryptool</div>
           </div>
         </div>

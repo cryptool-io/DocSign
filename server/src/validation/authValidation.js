@@ -37,4 +37,8 @@ const setupEncryption = Joi.object({
   allowReplace: Joi.boolean().default(false)
 });
 
-module.exports = { register, login, refresh, forgotPassword, resetPassword, verifyEmail, setupEncryption };
+const deleteAccount = Joi.object({
+  password: Joi.string().max(128).required()
+});
+
+module.exports = { register, login, refresh, forgotPassword, resetPassword, verifyEmail, setupEncryption, deleteAccount };

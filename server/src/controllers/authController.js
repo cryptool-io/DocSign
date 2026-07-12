@@ -8,6 +8,7 @@ const {
   revokeRefreshToken
 } = require('../services/authTokens');
 const email = require('../services/email');
+const { eraseAccount } = require('../services/retention');
 const { asyncHandler, badRequest, unauthorized, conflict, clientIp } = require('../utils/http');
 
 const REQUIRE_VERIFICATION = process.env.REQUIRE_EMAIL_VERIFICATION === 'true';
@@ -192,4 +193,26 @@ exports.resetPassword = asyncHandler(async (req, res) => {
   });
 
   res.json({ ok: true });
+});
+
+/**
+ * Right to erasure (GDPR Art. 17). Requires the current password to confirm.
+ * Purges personal/ancillary data + anonymizes the account; completed agreements
+ * and their audit trail are retained for the legal period. Irreversible.
+ */
+exports.deleteAccount = asyncHandler(async (req, res) => {
+  const { password } = req.body;
+  const user = await User.scope('withSecrets').findByPk(req.userId);
+  if (!user) throw unauthorized('Not signed in.', 'no_user');
+  const ok = await user.comparePassword(password);
+  if (!ok) throw badRequest('Password is incorrect.', 'bad_password');
+
+  const summary = await eraseAccount(user.id);
+
+  res.clearCookie(REFRESH_COOKIE, { path: '/api/auth' });
+  res.json({
+    ok: true,
+    message: 'Your account and personal data have been erased.',
+    ...summary
+  });
 });

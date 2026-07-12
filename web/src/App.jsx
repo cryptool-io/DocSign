@@ -25,6 +25,8 @@ import PublicDataRoom from './pages/public/PublicDataRoom.jsx';
 
 import ResetPassword from './pages/ResetPassword.jsx';
 import Legal from './pages/Legal.jsx';
+import Privacy from './pages/Privacy.jsx';
+import DPA from './pages/DPA.jsx';
 import PublicView from './pages/public/PublicView.jsx';
 import PublicSign from './pages/public/PublicSign.jsx';
 
@@ -57,6 +59,8 @@ export default function App() {
         <Route path="/forgot-password" element={<ResetPassword />} />
         <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/legal" element={<Legal />} />
+        <Route path="/privacy" element={<Privacy />} />
+        <Route path="/dpa" element={<DPA />} />
 
         {/* Sender app */}
         <Route

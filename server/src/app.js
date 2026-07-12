@@ -113,6 +113,13 @@ const start = async () => {
     console.log(`[docsign] API listening on http://localhost:${PORT}`);
     console.log(`[docsign] storage driver: ${process.env.DOCROOM_STORAGE_DRIVER || 's3'}`);
   });
+
+  // GDPR data-minimization: sweep abandoned drafts shortly after boot, then daily.
+  if (process.env.NODE_ENV !== 'test') {
+    const { runRetention } = require('./services/retention');
+    setTimeout(() => runRetention(), 60 * 1000).unref?.();
+    setInterval(() => runRetention(), 24 * 60 * 60 * 1000).unref?.();
+  }
 };
 
 if (require.main === module) start();

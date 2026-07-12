@@ -129,11 +129,18 @@ export default function Documents() {
   const [templates, setTemplates] = useState([]);
   const [linkDoc, setLinkDoc] = useState(null);
   const [uploading, setUploading] = useState(false);
+  const [uploadWs, setUploadWs] = useState('');
   const fileRef = useRef();
   const toast = useToast();
   const nav = useNavigate();
   const activeId = useCompany((s) => s.activeId);
   const companies = useCompany((s) => s.companies);
+
+  // Default the upload workspace to the active one (or the first) so new docs
+  // always land in a workspace.
+  useEffect(() => {
+    setUploadWs((cur) => cur || activeId || companies[0]?.id || '');
+  }, [activeId, companies]);
 
   const load = async () => {
     const q = companyParam();
@@ -187,6 +194,7 @@ export default function Documents() {
   const upload = async (file) => {
     if (!file) return;
     if (file.type !== 'application/pdf') return toast('Please choose a PDF.', 'err');
+    if (companies.length > 0 && !uploadWs) return toast('Pick a workspace for this document first.', 'err');
     setUploading(true);
     try {
       const fd = new FormData();
@@ -205,7 +213,7 @@ export default function Documents() {
         fd.append('file', file);
         fd.append('name', file.name);
       }
-      if (activeId) fd.append('companyId', activeId);
+      if (uploadWs) fd.append('companyId', uploadWs);
       await api.post('/documents', fd);
       toast(canEncrypt ? 'Uploaded (encrypted)' : 'Uploaded');
       load();
@@ -235,7 +243,21 @@ export default function Documents() {
           <h1>Documents</h1>
           <p className="muted">Upload PDFs, set up reusable signing fields, share tracked links, and send for signature.</p>
         </div>
-        <div>
+        <div className="flex" style={{ gap: 8, alignItems: 'center' }}>
+          {companies.length > 0 && (
+            <select
+              className="select"
+              style={{ maxWidth: 200 }}
+              value={uploadWs}
+              onChange={(e) => setUploadWs(e.target.value)}
+              title="Workspace the uploaded document belongs to"
+            >
+              <option value="" disabled>Choose a workspace…</option>
+              {companies.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          )}
           <input
             ref={fileRef}
             type="file"

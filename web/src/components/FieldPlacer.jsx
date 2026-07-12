@@ -324,7 +324,18 @@ export default function FieldPlacer({ documentId, doc, fields, setFields, active
                   Auto-fill with the signing date
                 </label>
               )}
-              <div className="muted" style={{ fontSize: 12 }}>Tip: arrow keys nudge it 1px (Shift = 10px).</div>
+              <div className="field" style={{ marginBottom: 0, maxWidth: 130 }}>
+                <label>Box height (pt)</label>
+                <input
+                  type="number"
+                  className="input"
+                  min={8}
+                  max={200}
+                  value={Math.round((selected.height || 0.03) * 792)}
+                  onChange={(e) => patchField(selected._id, { height: Math.max(0.008, Math.min((Number(e.target.value) || 10) / 792, 0.5)) })}
+                />
+              </div>
+              <div className="muted" style={{ fontSize: 12 }}>Tip: arrow keys nudge it 1px (Shift = 10px). Drag the corner to resize.</div>
               <button className="btn sm danger" onClick={() => { removeField(selected._id); setSelectedId(null); }}>Remove field</button>
             </div>
           ) : (

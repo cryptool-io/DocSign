@@ -717,11 +717,27 @@ export default function SendEnvelope() {
       </div>
 
       <div className="card mb">
-        <div className="flex between">
+        <div className="flex between" style={{ flexWrap: 'wrap', gap: 8 }}>
           <h2 style={{ margin: 0 }}>4 · Message</h2>
-          <button className="btn sm" onClick={saveAsTemplate} disabled={sending || !documentId} title="Save the fields, signer roles, subject and message as a reusable setup on this document">
-            💾 Save as template
-          </button>
+          <div className="flex" style={{ gap: 8, alignItems: 'center' }}>
+            {docSetups.length > 0 && (
+              <select
+                className="select"
+                style={{ height: 32, fontSize: 13, maxWidth: 240 }}
+                value={templateId}
+                onChange={(e) => setTemplateId(e.target.value)}
+                title="Load a saved setup for this document"
+              >
+                <option value="">Use a saved setup…</option>
+                {docSetups.map((t) => (
+                  <option key={t.id} value={t.id}>{t.Name}{t.IsDefault ? ' (default)' : ''}</option>
+                ))}
+              </select>
+            )}
+            <button className="btn sm" onClick={saveAsTemplate} disabled={sending || !documentId} title="Save the fields, signer roles, subject and message as a reusable setup on this document">
+              💾 Save as template
+            </button>
+          </div>
         </div>
         <div className="field mt">
           <label>Subject</label>

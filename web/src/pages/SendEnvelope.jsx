@@ -643,7 +643,13 @@ export default function SendEnvelope() {
                   💾 Save
                 </button>
               )}
-              <button className="btn sm danger" style={{ marginBottom: 0 }} onClick={() => removeSigner(i)} disabled={signers.length === 1}>
+              <button
+                className="btn sm danger"
+                style={{ marginBottom: 0, flex: '0 0 auto', width: 38, height: 38, padding: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, lineHeight: 1 }}
+                onClick={() => removeSigner(i)}
+                disabled={signers.length === 1}
+                title="Remove this signer"
+              >
                 ×
               </button>
             </div>

@@ -235,7 +235,26 @@ export default function SendEnvelope() {
   const filteredDocs = companyId ? docs.filter((d) => d.DocCompanyId === companyId) : docs;
   // Saved signing setups for the chosen document (you can pick which to apply).
   const docSetups = documentId ? templates.filter((t) => t.SourceDocumentId === documentId) : [];
-  const setSigner = (i, k, v) => setSigners((s) => s.map((row, idx) => (idx === i ? { ...row, [k]: v } : row)));
+  // Editing name/email means this is now a manual entry (not the picked
+  // recipient), so drop the recipient link → the dropdown shows "Manual…".
+  const setSigner = (i, k, v) =>
+    setSigners((s) =>
+      s.map((row, idx) => (idx === i ? { ...row, [k]: v, ...(k === 'name' || k === 'email' ? { recipientId: null } : {}) } : row))
+    );
+
+  // Save a manually-entered signer to the address book so they can be reused.
+  const saveContact = async (i) => {
+    const s = signers[i];
+    if (!s.name || !s.email) return toast('Add a name and email first.', 'err');
+    try {
+      const { data } = await api.post('/recipients', { name: s.name, email: s.email, title: s.signerRole || null, companyId: companyId || null });
+      setRecipients((r) => [...r, data.data]);
+      setSigner(i, 'recipientId', data.data.id);
+      toast('Saved to recipients');
+    } catch (err) {
+      toast(apiError(err).includes('already') ? 'Already in your recipients.' : apiError(err), err.response?.status === 409 ? undefined : 'err');
+    }
+  };
   const addSigner = () => setSigners((s) => [...s, { name: '', email: '', signerRole: '', signingOrder: s.length + 1 }]);
   const removeSigner = (i) => setSigners((s) => s.filter((_, idx) => idx !== i));
 
@@ -619,6 +638,11 @@ export default function SendEnvelope() {
                   <input className="input" type="number" min={1} value={s.signingOrder} onChange={(e) => setSigner(i, 'signingOrder', e.target.value)} />
                 </div>
               )}
+              {!s.recipientId && s.name && s.email && (
+                <button className="btn sm" style={{ marginBottom: 0, whiteSpace: 'nowrap' }} title="Save this person to your recipients" onClick={() => saveContact(i)}>
+                  💾 Save
+                </button>
+              )}
               <button className="btn sm danger" style={{ marginBottom: 0 }} onClick={() => removeSigner(i)} disabled={signers.length === 1}>
                 ×
               </button>
@@ -723,7 +747,7 @@ export default function SendEnvelope() {
             {docSetups.length > 0 && (
               <select
                 className="select"
-                style={{ height: 32, fontSize: 13, maxWidth: 240 }}
+                style={{ minWidth: 220 }}
                 value={templateId}
                 onChange={(e) => setTemplateId(e.target.value)}
                 title="Load a saved setup for this document"

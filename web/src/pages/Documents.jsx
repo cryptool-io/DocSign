@@ -128,6 +128,7 @@ export default function Documents() {
   const [links, setLinks] = useState([]);
   const [templates, setTemplates] = useState([]);
   const [linkDoc, setLinkDoc] = useState(null);
+  const [confirmAsk, setConfirmAsk] = useState(null); // { title, body, confirmLabel, onYes }
   const [uploading, setUploading] = useState(false);
   const [uploadWs, setUploadWs] = useState('');
   const fileRef = useRef();
@@ -159,16 +160,21 @@ export default function Documents() {
     load();
   }, [activeId]);
 
-  const removeTemplate = async (id) => {
-    if (!confirm('Delete this signing setup? The document itself is not affected.')) return;
-    try {
-      await api.delete(`/templates/${id}`);
-      toast('Signing setup deleted');
-      load();
-    } catch (err) {
-      toast(apiError(err), 'err');
-    }
-  };
+  const removeTemplate = (id, name) =>
+    setConfirmAsk({
+      title: 'Delete signing setup?',
+      body: `“${name}” — this removes the saved signing fields for this document. The document itself is not affected.`,
+      confirmLabel: 'Delete setup',
+      onYes: async () => {
+        try {
+          await api.delete(`/templates/${id}`);
+          toast('Signing setup deleted');
+          load();
+        } catch (err) {
+          toast(apiError(err), 'err');
+        }
+      }
+    });
 
   const setDocWorkspace = async (id, companyId) => {
     try {
@@ -180,16 +186,21 @@ export default function Documents() {
     }
   };
 
-  const removeDocument = async (id, name) => {
-    if (!confirm(`Delete "${name}"? It's removed from your Documents list (sent envelopes keep their own copy).`)) return;
-    try {
-      await api.delete(`/documents/${id}`);
-      toast('Document deleted');
-      load();
-    } catch (err) {
-      toast(apiError(err), 'err');
-    }
-  };
+  const removeDocument = (id, name) =>
+    setConfirmAsk({
+      title: 'Delete document?',
+      body: `“${name}” — it’s removed from your Documents list. Envelopes you already sent keep their own copy.`,
+      confirmLabel: 'Delete document',
+      onYes: async () => {
+        try {
+          await api.delete(`/documents/${id}`);
+          toast('Document deleted');
+          load();
+        } catch (err) {
+          toast(apiError(err), 'err');
+        }
+      }
+    });
 
   const upload = async (file) => {
     if (!file) return;
@@ -328,7 +339,7 @@ export default function Documents() {
                                 className="btn sm"
                                 style={{ border: 'none', borderRadius: 0, color: '#dc2626', padding: '2px 7px', borderLeft: '1px solid var(--border, #dcdcdc)' }}
                                 title="Delete this signing setup"
-                                onClick={() => removeTemplate(t.id)}
+                                onClick={() => removeTemplate(t.id, t.Name)}
                               >
                                 ×
                               </button>
@@ -383,6 +394,28 @@ export default function Documents() {
       )}
 
       {linkDoc && <LinkModal doc={linkDoc} onClose={() => { setLinkDoc(null); load(); }} />}
+
+      {confirmAsk && (
+        <div className="public-center" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 200 }}>
+          <div className="card center-narrow" style={{ maxWidth: 440 }}>
+            <h1 style={{ marginTop: 0, fontSize: 20 }}>{confirmAsk.title}</h1>
+            <p className="muted mb">{confirmAsk.body}</p>
+            <div className="wrap-actions" style={{ justifyContent: 'flex-end' }}>
+              <button className="btn" onClick={() => setConfirmAsk(null)}>Cancel</button>
+              <button
+                className="btn danger"
+                onClick={async () => {
+                  const fn = confirmAsk.onYes;
+                  setConfirmAsk(null);
+                  await fn();
+                }}
+              >
+                {confirmAsk.confirmLabel}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

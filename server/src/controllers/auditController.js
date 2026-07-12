@@ -34,7 +34,18 @@ exports.trail = asyncHandler(async (req, res) => {
 /** Download the completed (stamped + certificate) PDF — ciphertext if encrypted. */
 exports.completedFile = asyncHandler(async (req, res) => {
   const env = await ownEnvelope(req);
-  if (!env.CompletedFileKey) throw badRequest('This envelope is not completed yet.', 'not_completed');
+  if (!env.CompletedFileKey) {
+    // A completed envelope with no stored file means we've purged it for privacy:
+    // the signed PDF was emailed to every party and is intentionally not retained.
+    if (env.CompletedSha256) {
+      throw badRequest(
+        'The signed PDF was emailed to all parties and is not retained on our servers (privacy). ' +
+          `Verify any copy by its SHA-256: ${env.CompletedSha256}`,
+        'file_purged'
+      );
+    }
+    throw badRequest('This envelope is not completed yet.', 'not_completed');
+  }
   const buffer = await storage.getObject(env.CompletedFileKey);
   const doc = await require('../models').DocDocument.findByPk(env.DocDocumentId);
   if (doc?.Encrypted) {

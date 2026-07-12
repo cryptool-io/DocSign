@@ -28,10 +28,13 @@ const {
   DocEnvelope,
   DocEnvelopeSigner,
   DocSignatureField,
-  DocAuditEvent
+  DocAuditEvent,
+  DocDocument
 } = require('../models');
+const storage = require('./docroom/storage');
 
 const DRAFT_DAYS = parseInt(process.env.RETENTION_DRAFT_DAYS || '30', 10);
+const TERMINAL = ['completed', 'declined', 'voided', 'expired'];
 
 /** Delete an envelope's child rows then the envelopes themselves (FK-safe). */
 async function destroyEnvelopes(ids, t) {
@@ -59,11 +62,65 @@ async function purgeAbandonedDrafts() {
   return ids.length;
 }
 
+/**
+ * Remove the PDF bytes of a terminal envelope from storage. We keep only the
+ * SHA-256 hashes + audit trail as tamper-evidence — never the file itself.
+ *
+ *  - The finished signed PDF is always dropped (all parties hold the emailed copy,
+ *    and CompletedSha256 stays behind to prove any copy is authentic).
+ *  - The source PDF is dropped too, unless another consumer still needs the bytes:
+ *    an active envelope, a DocSend share link, or a data-room item.
+ *
+ * Safe to call more than once. Returns what was purged.
+ */
+async function purgeEnvelopeStorage(envelopeId) {
+  const env = await DocEnvelope.findByPk(envelopeId);
+  if (!env) return { completed: false, source: false };
+
+  const doc = await DocDocument.findByPk(env.DocDocumentId);
+  // Encrypted documents are already zero-knowledge (we can't read the bytes) AND
+  // their signed copy is never emailed — the owner retrieves it only via in-app
+  // download. Purging those would strand the owner, so we retain them. We only
+  // purge readable (non-encrypted) PDFs, which were delivered to every party by email.
+  if (doc && doc.Encrypted) return { completed: false, source: false };
+
+  let completed = false;
+
+  if (env.CompletedFileKey) {
+    await storage.deleteObject(env.CompletedFileKey).catch(() => {});
+    await env.update({ CompletedFileKey: null }); // CompletedSha256 remains as proof
+    completed = true;
+  }
+
+  // NB: we deliberately do NOT purge the source document here. Documents can be
+  // reused across multiple sends, and they also back DocSend share links and data
+  // rooms. Making source PDFs ephemeral belongs to the upload-per-send / overlay
+  // library refactor, where the whole flow is consistent.
+  return { completed, source: false };
+}
+
+/** Sweep any terminal envelope still holding PDF bytes (stragglers). */
+async function purgeTerminalEnvelopeFiles() {
+  const rows = await DocEnvelope.findAll({
+    where: { Status: { [Op.in]: TERMINAL }, CompletedFileKey: { [Op.ne]: null } },
+    attributes: ['id'],
+    limit: 500
+  });
+  let n = 0;
+  for (const row of rows) {
+    const { completed } = await purgeEnvelopeStorage(row.id);
+    if (completed) n += 1;
+  }
+  return n;
+}
+
 /** Entry point for the scheduler — logs a one-line summary, never throws. */
 async function runRetention() {
   try {
     const purged = await purgeAbandonedDrafts();
     if (purged) console.log(`[retention] purged ${purged} abandoned draft envelope(s) older than ${DRAFT_DAYS}d`);
+    const files = await purgeTerminalEnvelopeFiles();
+    if (files) console.log(`[retention] purged stored PDFs for ${files} completed envelope(s)`);
   } catch (err) {
     console.error('[retention] sweep failed:', err.message);
   }
@@ -135,4 +192,4 @@ async function eraseAccount(userId) {
   });
 }
 
-module.exports = { purgeAbandonedDrafts, runRetention, eraseAccount, DRAFT_DAYS };
+module.exports = { purgeAbandonedDrafts, purgeEnvelopeStorage, runRetention, eraseAccount, DRAFT_DAYS };

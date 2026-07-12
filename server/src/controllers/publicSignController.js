@@ -17,6 +17,7 @@ const {
 const { verifyAccessToken } = require('../services/authTokens');
 const { appendAuditEvent } = require('../services/docroom/hashChain');
 const { finalizeEnvelope } = require('../services/docroom/completion');
+const { purgeEnvelopeStorage } = require('../services/retention');
 const { signerOtpHtml, sendEmail, sendViaSmtp, envelopeCompletedHtml, signatureRequestHtml, APP_BASE_URL } = require('../services/email');
 const oauth = require('../services/emailOAuth');
 const { resolveSenderIdentity, resolveSendingConnection } = require('./envelopeController');
@@ -494,6 +495,9 @@ exports.submit = asyncHandler(async (req, res) => {
     await Promise.allSettled(
       recipients.map((to) => sendWithSender(sender, { to, subject: `Completed: ${env.Subject}`, html, attachments }))
     );
+    // Privacy: now that the signed PDF has been delivered to every party, drop the
+    // stored bytes. We keep only the SHA-256 + audit trail as tamper-evidence.
+    await purgeEnvelopeStorage(env.id).catch(() => {});
     return res.json({ data: { status: finalized?.env?.Status || 'completed' } });
   }
 

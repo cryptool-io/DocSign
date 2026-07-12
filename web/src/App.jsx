@@ -17,6 +17,7 @@ import LinkAnalytics from './pages/LinkAnalytics.jsx';
 import EnvelopeDetail from './pages/EnvelopeDetail.jsx';
 import SendEnvelope from './pages/SendEnvelope.jsx';
 import Settings from './pages/Settings.jsx';
+import Admin from './pages/Admin.jsx';
 import DataRooms from './pages/DataRooms.jsx';
 import Workspaces from './pages/Companies.jsx';
 import Inbox from './pages/Inbox.jsx';
@@ -78,6 +79,7 @@ export default function App() {
           <Route path="companies" element={<Navigate to="/workspaces" replace />} />
           <Route path="inbox" element={<Inbox />} />
           <Route path="settings" element={<Settings />} />
+          <Route path="admin" element={<Admin />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />

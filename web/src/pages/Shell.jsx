@@ -15,12 +15,15 @@ const links = [
   { to: '/settings', label: 'Settings' }
 ];
 
+const adminLink = { to: '/admin', label: 'Admin' };
+
 export default function Shell() {
   const { user, logout } = useAuth();
   const { companies, activeId, setActive, load } = useCompany();
   const nav = useNavigate();
   const loc = useLocation();
   const [pending, setPending] = useState(0);
+  const navLinks = user?.role === 'admin' ? [...links, adminLink] : links;
 
   useEffect(() => {
     load().catch(() => {});
@@ -46,7 +49,7 @@ export default function Shell() {
           <span>DocSign</span>
         </div>
         <nav className="nav">
-          {links.map((l) => (
+          {navLinks.map((l) => (
             <NavLink key={l.to} to={l.to} end={l.end} className={({ isActive }) => (isActive ? 'active' : '')}>
               <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                 {l.label}

@@ -2,6 +2,7 @@ const { exec } = require('child_process');
 const path = require('path');
 const { promisify } = require('util');
 const { asyncHandler } = require('../utils/http');
+const { User, DocDocument, DocEnvelope, sequelize } = require('../models');
 
 const run = promisify(exec);
 const REPO_ROOT = path.resolve(__dirname, '../../..');
@@ -46,6 +47,80 @@ exports.selfUpdate = asyncHandler(async (req, res) => {
   await record('pm2 restart', 'pm2 restart docsign-server');
 
   res.json({ ok: true, steps });
+});
+
+/**
+ * Platform-wide user list with per-user usage stats (admin only). Uses a few
+ * grouped aggregate queries keyed by user id rather than counting per row, so
+ * this stays O(1) queries regardless of user count.
+ */
+exports.listUsers = asyncHandler(async (_req, res) => {
+  const users = await User.findAll({ order: [['createdAt', 'ASC']] });
+
+  // Owned, non-archived documents grouped by owner.
+  const docRows = await DocDocument.findAll({
+    attributes: ['OwnerId', [sequelize.fn('COUNT', sequelize.col('id')), 'n']],
+    where: { ArchivedAt: null },
+    group: ['OwnerId'],
+    raw: true
+  });
+
+  // Envelopes sent (total) and completed, grouped by creator, in one pass.
+  const envRows = await DocEnvelope.findAll({
+    attributes: [
+      'CreatedBy',
+      [sequelize.fn('COUNT', sequelize.col('id')), 'total'],
+      [
+        sequelize.fn(
+          'SUM',
+          sequelize.literal(`CASE WHEN "Status" = 'completed' THEN 1 ELSE 0 END`)
+        ),
+        'completed'
+      ],
+      [sequelize.fn('MAX', sequelize.col('createdAt')), 'lastEnvelopeAt']
+    ],
+    group: ['CreatedBy'],
+    raw: true
+  });
+
+  const docsByUser = new Map(docRows.map((r) => [r.OwnerId, Number(r.n)]));
+  const envByUser = new Map(
+    envRows.map((r) => [
+      r.CreatedBy,
+      { total: Number(r.total), completed: Number(r.completed || 0), lastEnvelopeAt: r.lastEnvelopeAt }
+    ])
+  );
+
+  const data = users.map((u) => {
+    const env = envByUser.get(u.id) || { total: 0, completed: 0, lastEnvelopeAt: null };
+    const lastEnv = env.lastEnvelopeAt ? new Date(env.lastEnvelopeAt) : null;
+    const updated = u.updatedAt ? new Date(u.updatedAt) : null;
+    const lastActivity =
+      lastEnv && updated ? new Date(Math.max(lastEnv.getTime(), updated.getTime())) : lastEnv || updated;
+    return {
+      id: u.id,
+      name: u.Name,
+      email: u.Email,
+      role: u.Role,
+      createdAt: u.createdAt,
+      documents: docsByUser.get(u.id) || 0,
+      envelopesSent: env.total,
+      envelopesCompleted: env.completed,
+      lastActivity: lastActivity ? lastActivity.toISOString() : null
+    };
+  });
+
+  const totals = data.reduce(
+    (acc, u) => {
+      acc.documents += u.documents;
+      acc.envelopesSent += u.envelopesSent;
+      acc.envelopesCompleted += u.envelopesCompleted;
+      return acc;
+    },
+    { users: data.length, documents: 0, envelopesSent: 0, envelopesCompleted: 0 }
+  );
+
+  res.json({ data, totals });
 });
 
 exports.version = asyncHandler(async (_req, res) => {

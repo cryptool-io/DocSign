@@ -85,7 +85,21 @@ exports.meta = asyncHandler(async (req, res) => {
 exports.start = asyncHandler(async (req, res) => {
   const { signer, env } = await loadSignerByAccessToken(req.params.token);
   assertSignable(env, signer);
-  if (env.RequireVerification) {
+
+  // A signer who is logged into DocSign with the SAME email doesn't need a code —
+  // their login already proves the mailbox. Otherwise verification needs the OTP.
+  let verifiedViaLogin = false;
+  const appAuth = req.headers['x-app-authorization'];
+  if (appAuth && appAuth.startsWith('Bearer ')) {
+    try {
+      const claims = verifyAccessToken(appAuth.slice(7));
+      const user = await sequelize.models.User.findByPk(claims.userId);
+      if (user && String(user.Email).toLowerCase() === String(signer.Email).toLowerCase()) verifiedViaLogin = true;
+    } catch {
+      /* invalid app token → fall through to the code requirement */
+    }
+  }
+  if (env.RequireVerification && !verifiedViaLogin) {
     throw forbidden('This document requires email verification. Request a code instead.', 'verification_required');
   }
   if (!(await isSignerTurn(env, signer))) throw forbidden('It is not your turn to sign yet.', 'not_your_turn');
@@ -97,6 +111,7 @@ exports.start = asyncHandler(async (req, res) => {
       {
         Status: signer.Status === 'pending' ? 'viewed' : signer.Status,
         ViewedAt: signer.ViewedAt || new Date(),
+        ...(verifiedViaLogin ? { EmailVerifiedAt: signer.EmailVerifiedAt || new Date() } : {}),
         IpAddress: ip,
         UserAgent: ua
       },
@@ -110,7 +125,7 @@ exports.start = asyncHandler(async (req, res) => {
         actorId: signer.id,
         actorEmail: signer.Email,
         eventType: 'signer.opened',
-        metadata: { signerId: signer.id, verification: 'none' },
+        metadata: { signerId: signer.id, verification: verifiedViaLogin ? 'login' : 'none' },
         ipAddress: ip,
         userAgent: ua
       },

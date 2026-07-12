@@ -66,6 +66,28 @@ export default function PublicSign() {
     if (sigConstraint === 'type' && sigMode !== 'type') setSigMode('type');
   }, [sigConstraint]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Guided signing: the next of YOUR fields that still needs input, in reading
+  // order — used by the "Next field" button to jump straight to it.
+  const nextField =
+    fields
+      .filter((f) => f.mine)
+      .filter((f) => {
+        if (f.type === 'signature') return !sigReady;
+        if (f.type === 'initials') return !initialsReady;
+        if (f.type === 'checkbox') return f.required !== false && !values[f.id];
+        return !(values[f.id] && String(values[f.id]).trim());
+      })
+      .sort((a, b) => a.pageNumber - b.pageNumber || a.y - b.y || a.x - b.x)[0] || null;
+
+  const goToNext = () => {
+    if (!nextField) return;
+    const el = document.getElementById(`sf-${nextField.id}`);
+    if (!el) return;
+    el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    const input = el.querySelector('input, textarea');
+    if (input) setTimeout(() => input.focus(), 320);
+  };
+
   const auth = (extra = {}) => ({ headers: { Authorization: `Bearer ${signerToken}`, ...extra } });
 
   useEffect(() => {
@@ -88,6 +110,9 @@ export default function PublicSign() {
         if (d.signer.status === 'signed') setStage('done');
         else if (['declined', 'voided'].includes(d.status)) setStage('declined');
         else if (d.requireVerification === false) startNoCode();
+        // Logged into DocSign? Try to skip the code (server allows it if the
+        // account email matches this signer); otherwise fall back to the code.
+        else if (localStorage.getItem('docsign_access')) startNoCode();
         else setStage('otp');
       })
       .catch((e) => setError(e.response?.data?.error || 'This signing link is unavailable.'));
@@ -96,12 +121,15 @@ export default function PublicSign() {
   // No-code path (link mode with verification off): jump straight to signing.
   const startNoCode = async () => {
     try {
-      const { data } = await pub.post(`/sign/${token}/start`);
+      // Pass the app token so a logged-in matching signer can skip the code.
+      const appToken = localStorage.getItem('docsign_access');
+      const headers = appToken ? { 'X-App-Authorization': `Bearer ${appToken}` } : {};
+      const { data } = await pub.post(`/sign/${token}/start`, {}, { headers });
       setSignerToken(data.data.signerToken);
-    } catch (e) {
-      // If the server actually requires a code, fall back to the OTP screen.
+    } catch {
+      // Server still needs a code (not logged in / different email) → show OTP.
       setStage('otp');
-      setError(e.response?.data?.error || null);
+      setError(null);
     }
   };
 
@@ -374,6 +402,16 @@ export default function PublicSign() {
         {error && <p style={{ color: 'var(--danger)' }}>{error}</p>}
       </div>
 
+      {nextField && (
+        <button
+          className="btn primary"
+          onClick={goToNext}
+          style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 60, boxShadow: 'var(--shadow-lg, 0 8px 24px rgba(0,0,0,.25))' }}
+        >
+          Next field to sign →
+        </button>
+      )}
+
       {!pdfUrl ? (
         <Spinner center />
       ) : (
@@ -404,6 +442,7 @@ export default function PublicSign() {
                     return (
                       <div
                         key={f.id}
+                        id={`sf-${f.id}`}
                         className={`sign-field ${filled ? 'done' : ''} ${!f.mine ? 'readonly' : ''} ${isMissing ? 'missing' : ''}`}
                         style={{ left: `${f.x * 100}%`, top: `${f.y * 100}%`, width: `${f.width * 100}%`, height: `${f.height * 100}%`, ...(f.mine ? {} : { cursor: 'default' }) }}
                         title={f.mine ? undefined : f.byName ? `Filled by ${f.byName}` : 'Filled by another signer'}

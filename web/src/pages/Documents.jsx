@@ -251,7 +251,7 @@ export default function Documents() {
     <>
       <div className="page-head">
         <div>
-          <h1>Documents</h1>
+          <h1>Documents &amp; Templates</h1>
           <p className="muted">
             Upload PDFs, set up reusable signing fields, share tracked links, and send for signature. ·{' '}
             <a href="#" onClick={(e) => { e.preventDefault(); nav('/trash'); }}>Trash</a>

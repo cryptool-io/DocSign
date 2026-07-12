@@ -292,9 +292,11 @@ export default function PublicSign() {
         </div>
       </div>
 
-      <div className="card mb">
+      <div className="card mb" style={{ textAlign: 'left' }}>
         {hasSignatureFields && (
         <>
+        <h2 style={{ marginTop: 0, marginBottom: 4 }}>Add your signature</h2>
+        <p className="muted" style={{ marginTop: 0, marginBottom: 12 }}>Choose how to sign, then review the document below and complete the highlighted fields.</p>
         <div className="flex" style={{ gap: 8, marginBottom: 12 }}>
           {sigConstraint !== 'draw' && (
             <button
@@ -377,7 +379,7 @@ export default function PublicSign() {
       ) : (
         <div style={{ textAlign: 'center' }}>
           {fields.some((f) => !f.mine) && (
-            <div className="flex" style={{ gap: 16, justifyContent: 'center', marginBottom: 10, fontSize: 12 }}>
+            <div className="flex" style={{ gap: 16, justifyContent: 'flex-start', marginBottom: 10, fontSize: 12 }}>
               <span><span style={{ display: 'inline-block', width: 12, height: 12, border: '2px dashed var(--warn)', background: 'rgba(217,119,6,.08)', verticalAlign: 'middle', marginRight: 4 }} /> Your fields to fill</span>
               <span><span style={{ display: 'inline-block', width: 12, height: 12, border: '2px solid #cbd5e1', background: 'rgba(100,116,139,.08)', verticalAlign: 'middle', marginRight: 4 }} /> Other signer’s fields</span>
             </div>

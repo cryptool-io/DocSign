@@ -167,10 +167,13 @@ exports.list = asyncHandler(async (req, res) => {
   if (req.query.status) where.Status = req.query.status;
   const envelopes = await DocEnvelope.findAll({
     where,
-    include: [{ model: DocEnvelopeSigner, as: 'Signers' }],
+    include: [
+      { model: DocEnvelopeSigner, as: 'Signers' },
+      { model: DocDocument, as: 'Document', attributes: ['Name'] }
+    ],
     order: [['createdAt', 'DESC']]
   });
-  res.json({ data: envelopes.map(serialize) });
+  res.json({ data: envelopes.map((e) => ({ ...serialize(e), documentName: e.Document?.Name || null })) });
 });
 
 exports.get = asyncHandler(async (req, res) => {

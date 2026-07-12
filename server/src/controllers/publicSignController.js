@@ -17,7 +17,7 @@ const {
 const { verifyAccessToken } = require('../services/authTokens');
 const { appendAuditEvent } = require('../services/docroom/hashChain');
 const { finalizeEnvelope } = require('../services/docroom/completion');
-const { signerOtpHtml, sendEmail, sendViaSmtp, envelopeCompletedHtml } = require('../services/email');
+const { signerOtpHtml, sendEmail, sendViaSmtp, envelopeCompletedHtml, signatureRequestHtml, APP_BASE_URL } = require('../services/email');
 const oauth = require('../services/emailOAuth');
 const { resolveSenderIdentity, resolveSendingConnection } = require('./envelopeController');
 const { asyncHandler, notFound, badRequest, forbidden, unauthorized, tooMany, clientIp } = require('../utils/http');
@@ -485,19 +485,25 @@ exports.submit = asyncHandler(async (req, res) => {
   if (env.SigningOrder === 'sequential') {
     const nextOrder = Math.min(...remaining.map((s) => s.SigningOrder));
     const next = remaining.filter((s) => s.SigningOrder === nextOrder && !s.NotifiedAt);
-    const { signatureRequest } = require('../services/email');
-    const owner = await sequelize.models.User.findByPk(env.CreatedBy);
+    // Notify the next signer FROM the same workspace mailbox + brand as the first
+    // signer's request (not the generic system mailbox).
+    const sender = await envelopeSender(env);
+    const senderName = sender.identity?.fromName || (await sequelize.models.User.findByPk(env.CreatedBy))?.Name || 'The sender';
     await Promise.allSettled(
-      next.map((s) =>
-        signatureRequest({
-          to: s.Email,
+      next.map((s) => {
+        const html = signatureRequestHtml({
           signerName: s.Name,
-          senderName: owner?.Name || 'The sender',
-          subject: env.Subject,
+          senderName,
           message: env.Message,
-          signUrl: `${require('../services/email').APP_BASE_URL}/sign/${s.AccessToken}`
-        }).then(() => s.update({ NotifiedAt: new Date() }))
-      )
+          signUrl: `${APP_BASE_URL}/sign/${s.AccessToken}`,
+          logoUrl: sender.identity?.logoUrl
+        });
+        return sendWithSender(sender, {
+          to: s.Email,
+          subject: env.Subject || `${senderName} requested your signature`,
+          html
+        }).then(() => s.update({ NotifiedAt: new Date() }));
+      })
     );
   }
 

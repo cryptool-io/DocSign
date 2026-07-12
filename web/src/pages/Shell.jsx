@@ -6,7 +6,7 @@ import { useCompany } from '../lib/company.js';
 
 const links = [
   { to: '/', label: 'Dashboard', end: true },
-  { to: '/documents', label: 'Documents' },
+  { to: '/documents', label: 'Documents & Templates' },
   { to: '/send', label: 'Send for signature' },
   { to: '/inbox', label: 'Pending signatures' },
   { to: '/data-rooms', label: 'Data rooms' },

@@ -108,9 +108,9 @@ export default function Inbox() {
           <table>
             <thead>
               <tr>
-                <th>Subject</th>
-                <th>Status</th>
+                <th>Document</th>
                 <th>Signers</th>
+                <th>Status</th>
                 <th>Sent</th>
                 <th />
               </tr>
@@ -118,16 +118,24 @@ export default function Inbox() {
             <tbody>
               {items.map((e) => {
                 const signed = e.signers.filter((s) => s.status === 'signed').length;
+                const ordered = [...e.signers].sort((a, b) => a.signingOrder - b.signingOrder);
                 return (
                   <tr key={e.id} style={{ cursor: 'pointer' }} onClick={() => nav(`/envelopes/${e.id}`)}>
                     <td>
-                      <strong>{e.subject}</strong>
+                      <strong>{e.documentName || e.subject}</strong>
+                      <div className="muted">{e.subject}</div>
+                    </td>
+                    <td>
+                      {ordered.map((s, i) => (
+                        <div key={s.id} style={{ fontSize: 13 }}>
+                          <span className="muted">Signer {i + 1}:</span> {s.name}
+                          {s.status === 'signed' && <span style={{ color: 'var(--success)' }}> ✓</span>}
+                        </div>
+                      ))}
                     </td>
                     <td>
                       <Badge status={e.status} />
-                    </td>
-                    <td>
-                      {signed}/{e.signers.length} signed
+                      <div className="muted" style={{ fontSize: 12 }}>{signed}/{e.signers.length} signed</div>
                     </td>
                     <td className="muted">{e.sentAt ? fmtDate(e.sentAt) : 'Draft'}</td>
                     <td style={{ textAlign: 'right' }} onClick={(ev) => ev.stopPropagation()}>

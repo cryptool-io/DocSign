@@ -1,5 +1,6 @@
-import { useEffect } from 'react';
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
+import api from '../lib/api.js';
 import { useAuth } from '../lib/store.js';
 import { useCompany } from '../lib/company.js';
 
@@ -18,10 +19,25 @@ export default function Shell() {
   const { user, logout } = useAuth();
   const { companies, activeId, setActive, load } = useCompany();
   const nav = useNavigate();
+  const loc = useLocation();
+  const [pending, setPending] = useState(0);
 
   useEffect(() => {
     load().catch(() => {});
   }, [load]);
+
+  // Count of signatures still pending (your sent envelopes awaiting signature +
+  // documents awaiting your own signature). Refetched as you navigate.
+  useEffect(() => {
+    let dead = false;
+    Promise.all([
+      api.get('/analytics/overview').then((r) => r.data.data.pendingSignatures || 0).catch(() => 0),
+      api.get('/envelopes/inbox').then((r) => r.data.data.length || 0).catch(() => 0)
+    ]).then(([sent, toSign]) => {
+      if (!dead) setPending(sent + toSign);
+    });
+    return () => { dead = true; };
+  }, [loc.pathname]);
 
   return (
     <div className="app-shell">
@@ -32,7 +48,16 @@ export default function Shell() {
         <nav className="nav">
           {links.map((l) => (
             <NavLink key={l.to} to={l.to} end={l.end} className={({ isActive }) => (isActive ? 'active' : '')}>
-              {l.label}
+              <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                {l.label}
+                {l.to === '/inbox' && pending > 0 && (
+                  <span
+                    style={{ background: '#2563eb', color: '#fff', borderRadius: 10, fontSize: 11, fontWeight: 700, minWidth: 18, height: 18, padding: '0 5px', display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}
+                  >
+                    {pending}
+                  </span>
+                )}
+              </span>
             </NavLink>
           ))}
         </nav>

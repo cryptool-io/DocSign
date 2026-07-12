@@ -133,6 +133,7 @@ export default function Documents() {
   const toast = useToast();
   const nav = useNavigate();
   const activeId = useCompany((s) => s.activeId);
+  const companies = useCompany((s) => s.companies);
 
   const load = async () => {
     const q = companyParam();
@@ -156,6 +157,16 @@ export default function Documents() {
     try {
       await api.delete(`/templates/${id}`);
       toast('Signing setup deleted');
+      load();
+    } catch (err) {
+      toast(apiError(err), 'err');
+    }
+  };
+
+  const setDocWorkspace = async (id, companyId) => {
+    try {
+      await api.patch(`/documents/${id}`, { companyId: companyId || null });
+      toast('Workspace updated');
       load();
     } catch (err) {
       toast(apiError(err), 'err');
@@ -262,6 +273,18 @@ export default function Documents() {
                     <td>
                       <strong>{d.Name}</strong>
                       <div className="muted">{(d.SizeBytes / 1024).toFixed(0)} KB · {d.PageCount} pages</div>
+                      <select
+                        className="select"
+                        style={{ marginTop: 4, height: 28, fontSize: 12, padding: '2px 6px', maxWidth: 220 }}
+                        value={d.DocCompanyId || ''}
+                        onChange={(e) => setDocWorkspace(d.id, e.target.value)}
+                        title="Link this document to a workspace"
+                      >
+                        <option value="">No workspace (personal)</option>
+                        {companies.map((c) => (
+                          <option key={c.id} value={c.id}>{c.name}</option>
+                        ))}
+                      </select>
                     </td>
                     <td>
                       {tpls.length ? (

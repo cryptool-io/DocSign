@@ -92,6 +92,16 @@ exports.get = asyncHandler(async (req, res) => {
   res.json({ data: doc });
 });
 
+/** Link a document to a workspace (or clear it → personal). Owner only. */
+exports.update = asyncHandler(async (req, res) => {
+  const doc = await DocDocument.findOne({ where: { id: req.params.id, OwnerId: req.userId } });
+  if (!doc) throw notFound('Document not found');
+  if (req.body.companyId !== undefined) {
+    await doc.update({ DocCompanyId: await resolveCompanyId(req.userId, req.body.companyId) });
+  }
+  res.json({ data: doc });
+});
+
 /** Owner-side page geometry — the field editor needs intrinsic page sizes. */
 exports.pageSizes = asyncHandler(async (req, res) => {
   const doc = await findOwned(req);

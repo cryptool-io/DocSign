@@ -4,6 +4,7 @@ import api, { apiError } from '../lib/api.js';
 import { useCompany, companyParam, withCompany } from '../lib/company.js';
 import * as keystore from '../lib/keystore.js';
 import { countPages } from '../lib/pdf.js';
+import { sha256Hex } from '../lib/crypto.js';
 import { appendKey } from '../lib/linkkey.js';
 import { Spinner, useToast, fmtDate } from '../lib/ui.jsx';
 
@@ -131,7 +132,10 @@ export default function Documents() {
   const [confirmAsk, setConfirmAsk] = useState(null); // { title, body, confirmLabel, onYes }
   const [uploading, setUploading] = useState(false);
   const [uploadWs, setUploadWs] = useState('');
+  const [uploadMode, setUploadMode] = useState('stored'); // 'stored' | 'sovereign'
   const fileRef = useRef();
+  const attachRef = useRef();
+  const [pendingAttach, setPendingAttach] = useState(null); // { doc, then }
   const toast = useToast();
   const nav = useNavigate();
   const activeId = useCompany((s) => s.activeId);
@@ -208,6 +212,22 @@ export default function Documents() {
     if (companies.length > 0 && !uploadWs) return toast('Pick a workspace for this document first.', 'err');
     setUploading(true);
     try {
+      // Sovereign: the PDF never leaves the device. We send only the fingerprint +
+      // page count and create an overlay shell; bytes are attached transiently later.
+      if (uploadMode === 'sovereign') {
+        const buf = await file.arrayBuffer();
+        const fd = new FormData();
+        fd.append('storageMode', 'sovereign');
+        fd.append('name', file.name);
+        fd.append('sha256', await sha256Hex(new Uint8Array(buf)));
+        fd.append('pageCount', String(await countPages(buf)));
+        fd.append('sizeBytes', String(file.size));
+        if (uploadWs) fd.append('companyId', uploadWs);
+        await api.post('/documents', fd);
+        toast('Added (sovereign — file stays on your device)');
+        load();
+        return;
+      }
       const fd = new FormData();
       const canEncrypt = await keystore.ensureUnlocked();
       if (canEncrypt) {
@@ -233,6 +253,31 @@ export default function Documents() {
     } finally {
       setUploading(false);
       if (fileRef.current) fileRef.current.value = '';
+    }
+  };
+
+  // Sovereign docs keep no bytes at rest. Before an action that needs the PDF
+  // (send, set up fields), re-select the local file → attach transiently → proceed.
+  const needsBytes = (d) => d.StorageMode === 'sovereign' && !d.FileKey;
+  const withBytes = (d, then) => {
+    if (!needsBytes(d)) return then();
+    setPendingAttach({ doc: d, then });
+    attachRef.current?.click();
+  };
+  const onAttachFile = async (file) => {
+    const ctx = pendingAttach;
+    if (attachRef.current) attachRef.current.value = '';
+    setPendingAttach(null);
+    if (!file || !ctx) return;
+    if (file.type !== 'application/pdf') return toast('Please choose a PDF.', 'err');
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      await api.post(`/documents/${ctx.doc.id}/attach`, fd);
+      await load();
+      ctx.then({ ...ctx.doc, FileKey: 'attached' });
+    } catch (err) {
+      toast(apiError(err), 'err'); // e.g. fingerprint mismatch → wrong file
     }
   };
 
@@ -272,6 +317,16 @@ export default function Documents() {
               ))}
             </select>
           )}
+          <select
+            className="select"
+            style={{ maxWidth: 220 }}
+            value={uploadMode}
+            onChange={(e) => setUploadMode(e.target.value)}
+            title="Stored: we keep the PDF (reusable, share links, data rooms). Sovereign: the PDF stays on your device — we keep only the overlay + fingerprint."
+          >
+            <option value="stored">Store with DocSign</option>
+            <option value="sovereign">🔒 Keep on my device</option>
+          </select>
           <input
             ref={fileRef}
             type="file"
@@ -279,8 +334,15 @@ export default function Documents() {
             style={{ display: 'none' }}
             onChange={(e) => upload(e.target.files[0])}
           />
+          <input
+            ref={attachRef}
+            type="file"
+            accept="application/pdf"
+            style={{ display: 'none' }}
+            onChange={(e) => onAttachFile(e.target.files[0])}
+          />
           <button className="btn primary" disabled={uploading} onClick={() => fileRef.current?.click()}>
-            {uploading ? 'Uploading…' : '+ Upload PDF'}
+            {uploading ? 'Uploading…' : uploadMode === 'sovereign' ? '+ Add PDF (device)' : '+ Upload PDF'}
           </button>
         </div>
       </div>
@@ -308,6 +370,14 @@ export default function Documents() {
                   <tr key={d.id}>
                     <td>
                       <strong>{d.Name}</strong>
+                      {d.StorageMode === 'sovereign' && (
+                        <span
+                          title="Sovereign — the PDF stays on your device. We keep only the overlay + fingerprint. You'll re-select the file to send."
+                          style={{ marginLeft: 6, fontSize: 11, fontWeight: 700, color: '#7c3aed', background: '#f3e8ff', border: '1px solid #e4d3fb', borderRadius: 6, padding: '1px 6px', whiteSpace: 'nowrap' }}
+                        >
+                          🔒 On your device
+                        </span>
+                      )}
                       <div className="muted">{(d.SizeBytes / 1024).toFixed(0)} KB · {d.PageCount} pages</div>
                       <select
                         className="select"
@@ -365,19 +435,25 @@ export default function Documents() {
                     <td className="muted">{fmtDate(d.createdAt)}</td>
                     <td style={{ textAlign: 'right' }}>
                       <div className="wrap-actions" style={{ justifyContent: 'flex-end' }}>
-                        <button className="btn sm primary" onClick={() => nav('/send', { state: { documentId: d.id } })}>
+                        <button className="btn sm primary" onClick={() => withBytes(d, () => nav('/send', { state: { documentId: d.id } }))}>
                           Send to sign
                         </button>
                         <button
                           className="btn sm"
-                          title="Place reusable signature fields on this document"
-                          onClick={() => nav(`/templates/new?documentId=${d.id}`)}
+                          title={needsBytes(d) ? 'Re-select your local PDF to place fields on it' : 'Place reusable signature fields on this document'}
+                          onClick={() => withBytes(d, () => nav(`/templates/new?documentId=${d.id}`))}
                         >
                           {tpls.length ? '+ Add signing fields' : 'Set up signing fields'}
                         </button>
-                        <button className="btn sm" onClick={() => setLinkDoc(d)}>
-                          Share link
-                        </button>
+                        {d.StorageMode === 'sovereign' ? (
+                          <button className="btn sm" disabled title="Share links host the file — not available for sovereign documents (the PDF isn't stored)">
+                            Share link
+                          </button>
+                        ) : (
+                          <button className="btn sm" onClick={() => setLinkDoc(d)}>
+                            Share link
+                          </button>
+                        )}
                         {dl[0] && (
                           <button className="btn sm" onClick={() => nav(`/links/${dl[0].id}`)}>
                             Analytics

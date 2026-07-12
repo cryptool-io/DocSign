@@ -68,5 +68,12 @@ export async function run() {
   ok(!after.FileKey, 'transient bytes purged after completion (nothing retained)');
   ok(after.Sha256 === sha256 && after.StorageMode === 'sovereign', 'overlay shell + hash retained');
 
+  // 7. Back to a byte-less shell: preview refused again until the file is re-attached.
+  ok((await api('GET', `/api/documents/${docId}/page-sizes`, { token })).status === 400, 'shell has no bytes again (re-attach needed to reuse)');
+
+  // 8. The completed signed PDF is not retained either (only hash + audit remain).
+  const cf = await api('GET', `/api/envelopes/${envId}/completed-file`, { token, raw: true });
+  ok(cf.status === 400, 'signed PDF not retained on server (emailed to parties)');
+
   return state;
 }

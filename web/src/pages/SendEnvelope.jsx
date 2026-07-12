@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import api, { apiError } from '../lib/api.js';
 import { useCompany } from '../lib/company.js';
@@ -63,6 +63,26 @@ export default function SendEnvelope() {
 
   const reloadTemplates = () =>
     api.get('/templates').then((t) => setTemplates(t.data.data)).catch(() => {});
+  const reloadDocs = () =>
+    api.get('/documents').then((d) => setDocs(d.data.data)).catch(() => {});
+
+  // Sovereign docs keep no bytes at rest. Attach the local PDF transiently so the
+  // field editor can render it and the envelope can be signed; it's purged after.
+  const sovAttachRef = useRef();
+  const attachSovereign = async (file) => {
+    if (sovAttachRef.current) sovAttachRef.current.value = '';
+    if (!file) return;
+    if (file.type !== 'application/pdf') return toast('Please choose a PDF.', 'err');
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      await api.post(`/documents/${documentId}/attach`, fd);
+      await reloadDocs();
+      toast('Local file attached for this signing');
+    } catch (err) {
+      toast(apiError(err), 'err'); // fingerprint mismatch → wrong file
+    }
+  };
 
   // Delete the currently selected signing setup (with a confirm), then refresh.
   const deleteSetup = async () => {
@@ -207,6 +227,8 @@ export default function SendEnvelope() {
   // decryption key into an email (it never has the key).
   const selectedDocument = docs.find((d) => d.id === documentId) || null;
   const docEncrypted = Boolean(selectedDocument?.Encrypted);
+  // Sovereign doc with no bytes attached yet → must re-select the local PDF first.
+  const needsLocalFile = selectedDocument?.StorageMode === 'sovereign' && !selectedDocument?.FileKey;
   useEffect(() => {
     if (docEncrypted && deliveryMode === 'email') setDeliveryMode('link');
   }, [docEncrypted]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -246,8 +268,9 @@ export default function SendEnvelope() {
       );
     }
     if (noSendableMailbox) p.push('This workspace has no connected mailbox for email delivery — connect one under Workspaces, or switch delivery to a share link (step 5).');
+    if (needsLocalFile) p.push('This document is sovereign — attach your local PDF (step 3) to continue.');
     return p;
-  }, [documentId, subject, signers, fields, orphanFieldCount, noSendableMailbox]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [documentId, subject, signers, fields, orphanFieldCount, noSendableMailbox, needsLocalFile]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Show documents belonging to the chosen workspace (or all when none chosen).
   const filteredDocs = companyId ? docs.filter((d) => d.DocCompanyId === companyId) : docs;
@@ -708,6 +731,25 @@ export default function SendEnvelope() {
 
         {!documentId ? (
           <div className="empty">Choose a document above.</div>
+        ) : needsLocalFile ? (
+          <div className="empty" style={{ textAlign: 'center' }}>
+            <div style={{ fontSize: 28 }}>🔒</div>
+            <p style={{ margin: '8px 0 4px', fontWeight: 600 }}>{selectedDocument.Name} is on your device</p>
+            <p className="muted" style={{ margin: '0 0 14px' }}>
+              This is a sovereign document — we don’t store the PDF. Re-select it from your device to place
+              fields and send. It’s held only for this signing, then deleted.
+            </p>
+            <input
+              ref={sovAttachRef}
+              type="file"
+              accept="application/pdf"
+              style={{ display: 'none' }}
+              onChange={(e) => attachSovereign(e.target.files[0])}
+            />
+            <button className="btn primary" onClick={() => sovAttachRef.current?.click()}>
+              Select local PDF
+            </button>
+          </div>
         ) : (
           <>
             {placeableSigners.length === 0 ? (

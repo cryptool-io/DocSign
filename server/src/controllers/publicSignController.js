@@ -493,10 +493,18 @@ exports.submit = asyncHandler(async (req, res) => {
     // Notify the sender + all signers that it's complete — with the signed PDF
     // attached (plaintext docs only; encrypted docs are never emailed in the
     // clear, so the sender downloads them in-app), from the workspace mailbox.
+    // The workspace's own send-address is copied too, so e.g. MickAI keeps a copy
+    // even when only an external end-user signed.
     const owner = await sequelize.models.User.findByPk(env.CreatedBy);
     const allSigners = await DocEnvelopeSigner.findAll({ where: { DocEnvelopeId: env.id } });
-    const recipients = [...new Set([owner?.Email, ...allSigners.map((s) => s.Email)].filter(Boolean))];
     const sender = await envelopeSender(env);
+    const recipients = [
+      ...new Set(
+        [owner?.Email, sender.identity?.fromEmail, env.FromEmail, ...allSigners.map((s) => s.Email)]
+          .filter(Boolean)
+          .map((e) => e.toLowerCase())
+      )
+    ];
     const attachments =
       finalized?.pdfBuffer && !finalized.encrypted
         ? [{ filename: finalized.fileName || 'signed.pdf', content: finalized.pdfBuffer, contentType: 'application/pdf' }]

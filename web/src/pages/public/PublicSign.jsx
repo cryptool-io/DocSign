@@ -24,6 +24,15 @@ export default function PublicSign() {
   const [fields, setFields] = useState([]);
   const [pdfUrl, setPdfUrl] = useState(null);
   const [numPages, setNumPages] = useState(0);
+  // Render the PDF at the container width (capped) so it fits phones. Fields are
+  // percentage-positioned, so they scale with it.
+  const [pageWidth, setPageWidth] = useState(760);
+  useEffect(() => {
+    const calc = () => setPageWidth(Math.max(280, Math.min(760, window.innerWidth - 40)));
+    calc();
+    window.addEventListener('resize', calc);
+    return () => window.removeEventListener('resize', calc);
+  }, []);
   const [values, setValues] = useState({}); // fieldId -> value
   const [typedName, setTypedName] = useState('');
   const [sigMode, setSigMode] = useState('type'); // 'type' | 'draw'
@@ -413,7 +422,7 @@ export default function PublicSign() {
 
       {nextField && (
         <button
-          className="btn primary"
+          className="btn primary next-fab"
           onClick={goToNext}
           style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 60, boxShadow: 'var(--shadow-lg, 0 8px 24px rgba(0,0,0,.25))' }}
         >
@@ -434,7 +443,7 @@ export default function PublicSign() {
           <Document file={pdfUrl} onLoadSuccess={({ numPages: n }) => setNumPages(n)} loading={<Spinner center />}>
             {Array.from({ length: numPages }, (_, i) => (
               <div key={i} className="pdf-page-wrap pdf-stage">
-                <Page pageNumber={i + 1} width={760} renderTextLayer={false} renderAnnotationLayer={false} />
+                <Page pageNumber={i + 1} width={pageWidth} renderTextLayer={false} renderAnnotationLayer={false} />
                 {fields
                   .filter((f) => f.pageNumber === i + 1)
                   .map((f) => {

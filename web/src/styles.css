@@ -228,3 +228,31 @@ a.stat:hover { border-color: var(--faint); box-shadow: var(--shadow-md); transfo
 /* Modal / overlay */
 .public-center[style*="fixed"] { animation: overlay-in .14s ease; }
 @keyframes overlay-in { from { opacity: 0; } to { opacity: 1; } }
+
+/* ---- Mobile / phone ------------------------------------------------------ */
+@media (max-width: 640px) {
+  .public-wrap { padding: 16px 10px; }
+
+  /* Never let a page scroll sideways; wide content scrolls inside its own box. */
+  .pdf-page-wrap, .pdf-stage { max-width: 100%; }
+  .table-scroll, .card { overflow-x: auto; }
+
+  /* Header rows (incl. the sticky signing bar) stack instead of overflowing. */
+  .card.flex.between { flex-wrap: wrap; gap: 10px; }
+  .card.flex.between > * { min-width: 0; }
+  .wrap-actions { width: 100%; }
+  .wrap-actions .btn { flex: 1 1 auto; }
+
+  /* Signing legend + adopt controls wrap. */
+  .sign-field { font-size: 10px; }
+
+  /* Floating "next field" button: smaller and tucked into the corner. */
+  .next-fab { bottom: 12px !important; right: 12px !important; font-size: 13px; padding: 8px 12px !important; }
+
+  /* App shell: collapse the sidebar into a top strip so content gets full width. */
+  .app-shell { flex-direction: column; }
+  .sidebar { width: auto; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 12px; }
+  .sidebar .nav { flex-direction: row; flex-wrap: wrap; gap: 6px; }
+  .sidebar .brand { width: 100%; }
+  .topbar { flex-wrap: wrap; gap: 8px; height: auto; padding: 10px 12px; }
+}

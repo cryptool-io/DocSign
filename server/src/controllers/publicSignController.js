@@ -389,14 +389,24 @@ exports.submit = asyncHandler(async (req, res) => {
     }
   }
 
-  // Enforce the required signature style: if any signature field demands a drawn
-  // signature the signer must draw it; if it demands a typed name, they must type.
-  const sigModes = fields.filter((f) => f.Type === 'signature').map((f) => f.SignatureMode || 'any');
+  // Enforce the required signature style, but only for REQUIRED signature fields —
+  // an optional signature may be left blank. If any required signature field demands
+  // a drawn signature the signer must draw it; if it demands a typed name, they type.
+  const sigModes = fields.filter((f) => f.Type === 'signature' && f.Required).map((f) => f.SignatureMode || 'any');
   if (sigModes.includes('draw') && signatureType !== 'drawn') {
     throw badRequest('This document requires a hand-drawn signature.', 'signature_must_draw');
   }
   if (sigModes.includes('type') && signatureType !== 'typed') {
     throw badRequest('This document requires your typed name as the signature.', 'signature_must_type');
+  }
+
+  // A REQUIRED signature must actually be provided (defense-in-depth; the UI also
+  // enforces this). Optional signatures may be left blank.
+  const hasRequiredSignature = fields.some((f) => f.Type === 'signature' && f.Required);
+  const signatureProvided =
+    signatureType === 'drawn' ? Boolean(signatureData) : Boolean(String(signatureData || '').trim());
+  if (hasRequiredSignature && !signatureProvided) {
+    throw badRequest('Please provide your signature.', 'signature_required');
   }
 
   const nowIso = new Date().toISOString().slice(0, 10);

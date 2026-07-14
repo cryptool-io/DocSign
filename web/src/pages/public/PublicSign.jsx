@@ -41,6 +41,10 @@ export default function PublicSign() {
   // signers' fields are shown read-only for context.
   const hasSignatureFields = fields.some((f) => f.type === 'signature' && f.mine);
   const hasInitialsFields = fields.some((f) => f.type === 'initials' && f.mine);
+  // Only a REQUIRED signature/initials field forces the signer to adopt one; an
+  // optional one can be left blank.
+  const signatureRequired = fields.some((f) => f.type === 'signature' && f.mine && f.required !== false);
+  const initialsRequired = fields.some((f) => f.type === 'initials' && f.mine && f.required !== false);
 
   // Your required fields that are still empty (signature/initials handled by the
   // adopt controls). Recomputed live, so the red clears as you fill them.
@@ -76,9 +80,10 @@ export default function PublicSign() {
     fields
       .filter((f) => f.mine)
       .filter((f) => {
+        if (f.required === false) return false;
         if (f.type === 'signature') return !sigReady;
         if (f.type === 'initials') return !initialsReady;
-        if (f.type === 'checkbox') return f.required !== false && !values[f.id];
+        if (f.type === 'checkbox') return !values[f.id];
         return !(values[f.id] && String(values[f.id]).trim());
       })
       .sort((a, b) => a.pageNumber - b.pageNumber || a.y - b.y || a.x - b.x)[0] || null;
@@ -195,10 +200,10 @@ export default function PublicSign() {
 
   const submit = async () => {
     if (!consent) return setError('Please agree to sign electronically.');
-    if (hasSignatureFields && sigMode === 'draw' && !drawn) return setError('Please draw your signature, or switch to Type.');
-    if (hasSignatureFields && sigMode === 'type' && !typedName.trim()) return setError('Please type your full name to use as your signature.');
-    if (hasInitialsFields && initMode === 'draw' && !drawnInitials) return setError('Please draw your initials, or switch to Type.');
-    if (hasInitialsFields && initMode === 'type' && !typedInitials.trim()) return setError('Please enter your initials.');
+    if (signatureRequired && sigMode === 'draw' && !drawn) return setError('Please draw your signature, or switch to Type.');
+    if (signatureRequired && sigMode === 'type' && !typedName.trim()) return setError('Please type your full name to use as your signature.');
+    if (initialsRequired && initMode === 'draw' && !drawnInitials) return setError('Please draw your initials, or switch to Type.');
+    if (initialsRequired && initMode === 'type' && !typedInitials.trim()) return setError('Please enter your initials.');
     if (missingIds.size > 0) {
       setShowErrors(true);
       return setError(`Please complete the ${missingIds.size} required field${missingIds.size > 1 ? 's' : ''} highlighted in red.`);

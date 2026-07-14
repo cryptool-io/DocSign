@@ -55,8 +55,10 @@ const verifyOtp = Joi.object({
 const submit = Joi.object({
   consent: Joi.boolean().valid(true).required(),
   signatureType: Joi.string().valid('typed', 'drawn').required(),
-  // For 'drawn': a PNG data URL. For 'typed': the typed name string.
-  signatureData: Joi.string().max(2_000_000).required(),
+  // For 'drawn': a PNG data URL. For 'typed': the typed name string. May be empty
+  // when the signer has no required signature field (optional signatures allowed);
+  // a required signature is enforced server-side in the controller.
+  signatureData: Joi.string().max(2_000_000).allow('').required(),
   // For encrypted documents: the raw DEK (base64) from the signing link fragment,
   // sent once over TLS so the server can decrypt-to-stamp. Never stored.
   documentKey: Joi.string().max(128).allow(null, ''),

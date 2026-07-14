@@ -43,8 +43,32 @@ export default function PublicSign() {
   const [consent, setConsent] = useState(false);
   const [busy, setBusy] = useState(false);
 
-  // Is the signature ready? Typed needs a name; drawn needs ink on the canvas.
-  const sigReady = sigMode === 'draw' ? !!drawn : !!typedName.trim();
+  // Is the signature ready? Typed needs a name; drawn/uploaded produce an image
+  // stored in `drawn`.
+  const sigReady = sigMode === 'type' ? !!typedName.trim() : !!drawn;
+
+  // Turn an uploaded signature image into a normalized PNG data URL (same shape as
+  // a hand-drawn one), so the rest of the flow treats upload exactly like draw.
+  const onUploadSignature = (file) => {
+    if (!file) return;
+    if (!file.type.startsWith('image/')) return setError('Please choose an image file (PNG or JPG).');
+    const reader = new FileReader();
+    reader.onload = () => {
+      const img = new Image();
+      img.onload = () => {
+        const scale = Math.min(1, 600 / img.width);
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.round(img.width * scale);
+        canvas.height = Math.round(img.height * scale);
+        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+        setDrawn(canvas.toDataURL('image/png'));
+        setError(null);
+      };
+      img.onerror = () => setError('Could not read that image.');
+      img.src = reader.result;
+    };
+    reader.readAsDataURL(file);
+  };
   const initialsReady = initMode === 'draw' ? !!drawnInitials : !!typedInitials.trim();
   // Only the CURRENT signer's fields (`mine`) drive the adopt controls; other
   // signers' fields are shown read-only for context.
@@ -209,8 +233,8 @@ export default function PublicSign() {
 
   const submit = async () => {
     if (!consent) return setError('Please agree to sign electronically.');
-    if (signatureRequired && sigMode === 'draw' && !drawn) return setError('Please draw your signature, or switch to Type.');
     if (signatureRequired && sigMode === 'type' && !typedName.trim()) return setError('Please type your full name to use as your signature.');
+    if (signatureRequired && sigMode !== 'type' && !drawn) return setError(sigMode === 'upload' ? 'Please upload an image of your signature, or switch to Type.' : 'Please draw your signature, or switch to Type.');
     if (initialsRequired && initMode === 'draw' && !drawnInitials) return setError('Please draw your initials, or switch to Type.');
     if (initialsRequired && initMode === 'type' && !typedInitials.trim()) return setError('Please enter your initials.');
     if (missingIds.size > 0) {
@@ -225,8 +249,8 @@ export default function PublicSign() {
       const valueFields = fields.filter((f) => f.mine && !['signature', 'initials'].includes(f.type));
       const payload = {
         consent: true,
-        signatureType: sigMode === 'draw' ? 'drawn' : 'typed',
-        signatureData: sigMode === 'draw' ? drawn : typedName,
+        signatureType: sigMode === 'type' ? 'typed' : 'drawn',
+        signatureData: sigMode === 'type' ? typedName : drawn || '',
         initialsType: initMode === 'draw' ? 'drawn' : 'typed',
         initialsData: initMode === 'draw' ? drawnInitials : typedInitials,
         // For an encrypted document, hand the server the key (from the link
@@ -326,7 +350,7 @@ export default function PublicSign() {
       <div className="card mb flex between" style={{ position: 'sticky', top: 10, zIndex: 20 }}>
         <div>
           <strong>{meta.subject}</strong>
-          <div className="muted">Complete the highlighted fields, then sign.</div>
+          <div className="muted">Fill the <span style={{ color: 'var(--warn)', fontWeight: 600 }}>required</span> fields (orange), then sign. Grey fields are optional.</div>
         </div>
         <div className="wrap-actions">
           <button className="btn danger" onClick={decline}>
@@ -362,6 +386,15 @@ export default function PublicSign() {
               Draw signature
             </button>
           )}
+          {sigConstraint === 'any' && (
+            <button
+              type="button"
+              className={`btn ${sigMode === 'upload' ? 'primary' : ''}`}
+              onClick={() => setSigMode('upload')}
+            >
+              Upload signature
+            </button>
+          )}
         </div>
         {sigConstraint === 'draw' && (
           <p className="muted" style={{ fontSize: 12, marginBottom: 10 }}>This document requires a hand-drawn signature.</p>
@@ -374,6 +407,16 @@ export default function PublicSign() {
           <div className="field" style={{ marginBottom: 0 }}>
             <label>Type your full name to use as your signature</label>
             <input className="input" value={typedName} onChange={(e) => setTypedName(e.target.value)} style={{ fontFamily: 'cursive', fontSize: 20 }} />
+          </div>
+        ) : sigMode === 'upload' ? (
+          <div className="field" style={{ marginBottom: 0 }}>
+            <label>Upload a picture of your signature (PNG or JPG)</label>
+            <input type="file" accept="image/*" className="input" onChange={(e) => onUploadSignature(e.target.files[0])} />
+            {drawn && (
+              <div style={{ marginTop: 8, border: '1px solid var(--border, #ddd)', borderRadius: 8, padding: 8, display: 'inline-block', background: '#fff' }}>
+                <img src={drawn} alt="signature preview" style={{ maxHeight: 80, maxWidth: 260, objectFit: 'contain' }} />
+              </div>
+            )}
           </div>
         ) : (
           <div className="field" style={{ marginBottom: 0 }}>
@@ -434,12 +477,15 @@ export default function PublicSign() {
         <Spinner center />
       ) : (
         <div style={{ textAlign: 'center' }}>
-          {fields.some((f) => !f.mine) && (
-            <div className="flex" style={{ gap: 16, justifyContent: 'flex-start', marginBottom: 10, fontSize: 12 }}>
-              <span><span style={{ display: 'inline-block', width: 12, height: 12, border: '2px dashed var(--warn)', background: 'rgba(217,119,6,.08)', verticalAlign: 'middle', marginRight: 4 }} /> Your fields to fill</span>
+          <div className="flex" style={{ gap: 14, justifyContent: 'flex-start', marginBottom: 10, fontSize: 12, flexWrap: 'wrap' }}>
+            <span><span style={{ display: 'inline-block', width: 12, height: 12, border: '2px dashed var(--warn)', background: 'rgba(217,119,6,.08)', verticalAlign: 'middle', marginRight: 4 }} /> Required — must fill</span>
+            {fields.some((f) => f.mine && f.required === false) && (
+              <span><span style={{ display: 'inline-block', width: 12, height: 12, border: '2px dashed #64748b', background: 'rgba(100,116,139,.06)', verticalAlign: 'middle', marginRight: 4 }} /> Optional — you can skip</span>
+            )}
+            {fields.some((f) => !f.mine) && (
               <span><span style={{ display: 'inline-block', width: 12, height: 12, border: '2px solid #cbd5e1', background: 'rgba(100,116,139,.08)', verticalAlign: 'middle', marginRight: 4 }} /> Other signer’s fields</span>
-            </div>
-          )}
+            )}
+          </div>
           <Document file={pdfUrl} onLoadSuccess={({ numPages: n }) => setNumPages(n)} loading={<Spinner center />}>
             {Array.from({ length: numPages }, (_, i) => (
               <div key={i} className="pdf-page-wrap pdf-stage">
@@ -461,7 +507,7 @@ export default function PublicSign() {
                       <div
                         key={f.id}
                         id={`sf-${f.id}`}
-                        className={`sign-field ${filled ? 'done' : ''} ${!f.mine ? 'readonly' : ''} ${isMissing ? 'missing' : ''}`}
+                        className={`sign-field ${filled ? 'done' : ''} ${!f.mine ? 'readonly' : ''} ${f.mine && f.required === false ? 'optional' : ''} ${isMissing ? 'missing' : ''}`}
                         style={{ left: `${f.x * 100}%`, top: `${f.y * 100}%`, width: `${f.width * 100}%`, height: `${f.height * 100}%`, ...(f.mine ? {} : { cursor: 'default' }) }}
                         title={f.mine ? undefined : f.byName ? `Filled by ${f.byName}` : 'Filled by another signer'}
                       >
@@ -474,7 +520,7 @@ export default function PublicSign() {
                             </span>
                           )
                         ) : f.type === 'signature' ? (
-                          sigMode === 'draw' && drawn ? (
+                          sigMode !== 'type' && drawn ? (
                             <img src={drawn} alt="signature" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
                           ) : (
                             <span style={{ fontFamily: 'cursive', fontSize: 16 }}>{typedName || 'signature'}</span>
@@ -513,7 +559,7 @@ export default function PublicSign() {
                             }}
                             value={values[f.id] || ''}
                             onChange={(e) => setValues((v) => ({ ...v, [f.id]: e.target.value }))}
-                            placeholder={isMissing ? `${f.label || 'text'} — required` : f.label || 'text'}
+                            placeholder={f.required === false ? `${f.label || 'text'} (optional)` : `${f.label || 'text'} *`}
                           />
                         )}
                       </div>

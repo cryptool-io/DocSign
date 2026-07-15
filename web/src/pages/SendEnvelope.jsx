@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import api, { apiError } from '../lib/api.js';
 import { useCompany } from '../lib/company.js';
@@ -229,6 +229,37 @@ export default function SendEnvelope() {
   const docEncrypted = Boolean(selectedDocument?.Encrypted);
   // Sovereign doc with no bytes attached yet → must re-select the local PDF first.
   const needsLocalFile = selectedDocument?.StorageMode === 'sovereign' && !selectedDocument?.FileKey;
+
+  // Before an email send, verify the workspace's sending mailbox actually works so
+  // a doc never silently goes out from the system address on a dead token.
+  const [mailboxHealth, setMailboxHealth] = useState(null);
+  const [checkingMailbox, setCheckingMailbox] = useState(false);
+  const checkMailbox = useCallback(() => {
+    if (!companyId || deliveryMode !== 'email') {
+      setMailboxHealth(null);
+      return;
+    }
+    setCheckingMailbox(true);
+    api
+      .get(`/companies/${companyId}/mailbox/health`)
+      .then((r) => setMailboxHealth(r.data.data))
+      .catch(() => setMailboxHealth(null))
+      .finally(() => setCheckingMailbox(false));
+  }, [companyId, deliveryMode]);
+  useEffect(() => {
+    checkMailbox();
+  }, [checkMailbox]);
+
+  const reconnectMailbox = async () => {
+    if (mailboxHealth?.provider === 'smtp') return nav('/workspaces');
+    try {
+      const provider = mailboxHealth?.provider === 'microsoft' ? 'microsoft' : 'google';
+      const { data } = await api.get(`/companies/${companyId}/connect/${provider}`);
+      window.open(data.data.url, '_blank', 'noopener');
+    } catch (e) {
+      toast(apiError(e), 'err');
+    }
+  };
   useEffect(() => {
     if (docEncrypted && deliveryMode === 'email') setDeliveryMode('link');
   }, [docEncrypted]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -269,8 +300,11 @@ export default function SendEnvelope() {
     }
     if (noSendableMailbox) p.push('This workspace has no connected mailbox for email delivery — connect one under Workspaces, or switch delivery to a share link (step 5).');
     if (needsLocalFile) p.push('This document is sovereign — attach your local PDF (step 3) to continue.');
+    if (deliveryMode === 'email' && mailboxHealth && mailboxHealth.needsReconnect) {
+      p.push(`The ${mailboxHealth.email} mailbox needs reconnecting before it can send — reconnect it below, or switch delivery to a share link (step 5).`);
+    }
     return p;
-  }, [documentId, subject, signers, fields, orphanFieldCount, noSendableMailbox, needsLocalFile]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [documentId, subject, signers, fields, orphanFieldCount, noSendableMailbox, needsLocalFile, mailboxHealth, deliveryMode]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Show documents belonging to the chosen workspace (or all when none chosen).
   const filteredDocs = companyId ? docs.filter((d) => d.DocCompanyId === companyId) : docs;
@@ -909,6 +943,21 @@ export default function SendEnvelope() {
           </p>
         )}
       </div>
+
+      {deliveryMode === 'email' && mailboxHealth && mailboxHealth.needsReconnect && (
+        <div className="card mb" style={{ border: '1px solid #f3c1c1', background: '#fef2f2', color: '#b91c1c' }}>
+          <strong>⚠ {mailboxHealth.email} needs reconnecting.</strong> Its authorization has expired, so this
+          would send from the system address instead of your workspace.
+          <div className="wrap-actions mt">
+            <button className="btn sm" onClick={reconnectMailbox}>
+              {mailboxHealth.provider === 'smtp' ? 'Fix in Workspaces' : 'Reconnect mailbox'}
+            </button>
+            <button className="btn sm" onClick={checkMailbox} disabled={checkingMailbox}>
+              {checkingMailbox ? 'Checking…' : 'Re-check'}
+            </button>
+          </div>
+        </div>
+      )}
 
       {showErrors && problems.length > 0 && (
         <div className="card mb" style={{ border: '1px solid #dc2626', background: '#fef2f2' }}>

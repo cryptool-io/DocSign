@@ -5,7 +5,9 @@ const { DocCompany, DocCompanyEmail, DocCompanyMember, User, sequelize } = requi
 const { asyncHandler, notFound, badRequest, conflict } = require('../utils/http');
 const { slugify } = require('../utils/misc');
 const { systemCanSendFrom, SYSTEM_DOMAIN, verifySmtp } = require('../services/email');
-const { encryptSecret } = require('../services/secretStore');
+const oauth = require('../services/emailOAuth');
+const { encryptSecret, decryptSecret } = require('../services/secretStore');
+const { flagConnectionError, clearConnectionError } = require('../services/mailboxHealth');
 const { memberCompanyIds } = require('../utils/access');
 
 const LOGO_DIR = path.resolve(__dirname, '../../storage/logos');
@@ -128,6 +130,43 @@ exports.remove = asyncHandler(async (req, res) => {
   if (!company) throw notFound('Company not found');
   await company.update({ ArchivedAt: new Date() });
   res.json({ ok: true });
+});
+
+/**
+ * Live health check of the mailbox this workspace would send through — used by the
+ * Send page before an email send. Actually exercises the credential (refreshes the
+ * OAuth token / re-verifies SMTP) and flags/clears the reconnect state accordingly.
+ */
+exports.mailboxHealth = asyncHandler(async (req, res) => {
+  const company = await withEmails(req.params.id, req.userId);
+  if (!company) throw notFound('Company not found');
+  const emails = company.Emails || [];
+  const pick =
+    emails.find((e) => e.IsDefault && e.Provider && e.VerifiedAt) || emails.find((e) => e.Provider && e.VerifiedAt);
+  // No connected mailbox → email goes via the system mailbox (nothing to reconnect).
+  if (!pick) return res.json({ data: { ok: true, mode: 'system' } });
+
+  const row = await DocCompanyEmail.scope('withTokens').findByPk(pick.id);
+  try {
+    if (row.Provider === 'smtp') {
+      await verifySmtp({
+        host: row.SmtpHost,
+        port: row.SmtpPort,
+        secure: row.SmtpSecure,
+        user: row.SmtpUsername || row.Email,
+        pass: decryptSecret(row.SmtpPasswordEnc)
+      });
+    } else {
+      await oauth.refreshAccessToken(row.Provider, decryptSecret(row.OAuthRefreshTokenEnc));
+    }
+    await clearConnectionError(row.id);
+    return res.json({ data: { ok: true, mode: 'workspace', email: row.Email, provider: row.Provider } });
+  } catch (e) {
+    await flagConnectionError(row.id, e.message);
+    return res.json({
+      data: { ok: false, needsReconnect: true, email: row.Email, provider: row.Provider, error: String(e.message || e).slice(0, 200) }
+    });
+  }
 });
 
 /* ---- Linked emails ------------------------------------------------------ */

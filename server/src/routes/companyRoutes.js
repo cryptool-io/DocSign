@@ -32,6 +32,9 @@ router.post('/:id/emails', validate(idParam, 'params'), validate(schemas.addEmai
 router.delete('/:id/emails/:emailId', validate(idParam, 'params'), controller.removeEmail);
 router.post('/:id/emails/:emailId/default', validate(idParam, 'params'), controller.setDefaultEmail);
 
+// Live health check of the workspace's sending mailbox (used before an email send).
+router.get('/:id/mailbox/health', validate(idParam, 'params'), controller.mailboxHealth);
+
 // Connect / disconnect a real mailbox to send from.
 router.get('/:id/connect/:provider', validate(idParam, 'params'), oauthController.authorize);
 router.post('/:id/smtp', validate(idParam, 'params'), validate(schemas.connectSmtp), controller.connectSmtp);

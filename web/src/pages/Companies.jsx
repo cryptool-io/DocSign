@@ -40,7 +40,7 @@ function CompanyCard({ company, providers, onChanged }) {
   const [busy, setBusy] = useState(false);
   const [showSmtp, setShowSmtp] = useState(false);
   const [smtp, setSmtp] = useState({ preset: 'gmail', email: '', host: 'smtp.gmail.com', port: 465, secure: true, username: '', password: '' });
-  const [brand, setBrand] = useState({ senderName: company.senderName || '', logoUrl: company.logoUrl || '' });
+  const [brand, setBrand] = useState({ senderName: company.senderName || '', logoUrl: company.logoUrl || '', replyToEmail: company.replyToEmail || '' });
   const logoInputRef = useRef(null);
 
   const uploadLogo = async (file) => {
@@ -65,7 +65,7 @@ function CompanyCard({ company, providers, onChanged }) {
     e.preventDefault();
     setBusy(true);
     try {
-      await api.patch(`/companies/${company.id}`, { senderName: brand.senderName || null, logoUrl: brand.logoUrl || null });
+      await api.patch(`/companies/${company.id}`, { senderName: brand.senderName || null, logoUrl: brand.logoUrl || null, replyToEmail: brand.replyToEmail || null });
       toast('Branding saved — emails from this workspace will use it.');
       onChanged();
     } catch (err) {
@@ -205,6 +205,17 @@ function CompanyCard({ company, providers, onChanged }) {
           <div className="field" style={{ marginBottom: 0 }}>
             <label>Sender name</label>
             <input className="input" value={brand.senderName} onChange={(e) => setBrand((b) => ({ ...b, senderName: e.target.value }))} placeholder={company.name} />
+          </div>
+          <div className="field" style={{ marginBottom: 0, flex: 1.2 }}>
+            <label>Contact email (shown in emails)</label>
+            <input
+              className="input"
+              type="email"
+              value={brand.replyToEmail}
+              onChange={(e) => setBrand((b) => ({ ...b, replyToEmail: e.target.value }))}
+              placeholder={company.senderEmail || 'hello@yourco.com'}
+              title="Recipients see this in the email footer (“if you weren't expecting this, contact …”) and replies go here. Defaults to your send address."
+            />
           </div>
           <div className="field" style={{ marginBottom: 0, flex: 1.4 }}>
             <label>Logo — upload or paste a URL</label>

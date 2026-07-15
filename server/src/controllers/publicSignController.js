@@ -174,7 +174,8 @@ const sendWithSender = async ({ identity, connection }, { to, subject, html, att
   return sendEmail({ to, subject, html, attachments });
 };
 
-const brandOf = (identity) => (identity ? { name: identity.fromName, logoUrl: identity.logoUrl } : undefined);
+const brandOf = (identity) =>
+  identity ? { name: identity.fromName, logoUrl: identity.logoUrl, contactEmail: identity.replyTo } : undefined;
 
 const sendOtpBranded = async (env, signer, code) => {
   const sender = await envelopeSender(env);
@@ -533,7 +534,8 @@ exports.submit = asyncHandler(async (req, res) => {
           senderName,
           message: env.Message,
           signUrl: `${APP_BASE_URL}/sign/${s.AccessToken}`,
-          logoUrl: sender.identity?.logoUrl
+          logoUrl: sender.identity?.logoUrl,
+          contactEmail: sender.identity?.replyTo
         });
         return sendWithSender(sender, {
           to: s.Email,

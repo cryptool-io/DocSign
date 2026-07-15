@@ -61,7 +61,11 @@ const layout = (heading, bodyHtml, cta, brand = {}) => {
       }
     </div>
     <div style="padding:16px 0;border-top:1px solid #eee;font-size:12px;color:#888">
-      Sent by ${brandName}. If you weren't expecting this, you can ignore it.
+      Sent by ${brandName}.${
+        brand.contactEmail
+          ? ` If you weren't expecting this, or have any questions, contact <a href="mailto:${brand.contactEmail}" style="color:#2563eb">${brand.contactEmail}</a>.`
+          : " If you weren't expecting this, you can ignore it."
+      }
     </div>
   </div>`;
 };
@@ -159,7 +163,7 @@ const linkViewedNotice = ({ to, docName, viewerEmail, when }) =>
 
 // Shared HTML so the request can go via the global mailbox OR a connected one.
 // `logoUrl` brands the email with the sending workspace's logo.
-const signatureRequestHtml = ({ signerName, senderName, message, signUrl, logoUrl }) => {
+const signatureRequestHtml = ({ signerName, senderName, message, signUrl, logoUrl, contactEmail }) => {
   // Use the sender's custom note when provided; otherwise a single, professional
   // default. Never show both (that read as the same sentence twice).
   const body = message
@@ -169,7 +173,7 @@ const signatureRequestHtml = ({ signerName, senderName, message, signUrl, logoUr
     `${senderName} requested your signature`,
     `<p>Hi ${signerName},</p>${body}<p>Use the secure button below to open, review, and sign the document. It only takes a moment.</p>`,
     { label: 'Review & sign', url: signUrl },
-    { name: senderName, logoUrl }
+    { name: senderName, logoUrl, contactEmail }
   );
 };
 
@@ -180,7 +184,7 @@ const signatureRequest = ({ to, signerName, senderName, fromEmail, replyTo, subj
     fromEmail,
     replyTo,
     subject: subject || `${senderName} requested your signature`,
-    html: signatureRequestHtml({ signerName, senderName, message, signUrl, logoUrl })
+    html: signatureRequestHtml({ signerName, senderName, message, signUrl, logoUrl, contactEmail: replyTo })
   });
 
 // Shared HTML so the code can go via the system mailbox OR a connected one, with
@@ -202,7 +206,7 @@ const signerOtp = ({ to, code, fromName, fromEmail, replyTo, logoUrl }) =>
     fromEmail,
     replyTo,
     subject: `Your signing verification code: ${code}`,
-    html: signerOtpHtml(code, fromName || logoUrl ? { name: fromName, logoUrl } : undefined)
+    html: signerOtpHtml(code, fromName || logoUrl ? { name: fromName, logoUrl, contactEmail: replyTo } : undefined)
   });
 
 const envelopeCompletedHtml = (hasAttachment, downloadUrl, brand) =>
@@ -222,7 +226,7 @@ const envelopeCompleted = ({ to, subject, downloadUrl, attachments, fromName, fr
     fromEmail,
     replyTo,
     subject: subject || 'Document completed',
-    html: envelopeCompletedHtml(Boolean(attachments && attachments.length), downloadUrl, fromName || logoUrl ? { name: fromName, logoUrl } : undefined),
+    html: envelopeCompletedHtml(Boolean(attachments && attachments.length), downloadUrl, fromName || logoUrl ? { name: fromName, logoUrl, contactEmail: replyTo } : undefined),
     attachments
   });
 

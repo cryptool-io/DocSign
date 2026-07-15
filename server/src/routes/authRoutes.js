@@ -26,6 +26,7 @@ router.post('/reset-password', authLimiter, validate(schemas.resetPassword), con
 router.get('/me', requireAuth, controller.me);
 router.post('/encryption/setup', requireAuth, validate(schemas.setupEncryption), controller.setupEncryption);
 router.get('/encryption/recovery', requireAuth, controller.recoveryBlob);
+router.get('/account/export', requireAuth, controller.exportData);
 router.delete('/account', authLimiter, requireAuth, validate(schemas.deleteAccount), controller.deleteAccount);
 
 module.exports = router;

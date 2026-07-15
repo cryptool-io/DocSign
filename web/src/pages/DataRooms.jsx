@@ -81,13 +81,18 @@ function RoomModal({ docs, existing, onClose, onSaved }) {
           <label>Documents ({picked.length} selected)</label>
           <div style={{ maxHeight: 200, overflow: 'auto', border: '1px solid var(--border)', borderRadius: 8, padding: 8 }}>
             {docs.length === 0 && <div className="muted">Upload documents first.</div>}
-            {docs.map((d) => (
+            {docs.filter((d) => d.StorageMode !== 'sovereign').map((d) => (
               <label key={d.id} className="checkbox" style={{ marginBottom: 6 }}>
                 <input type="checkbox" checked={picked.includes(d.id)} onChange={() => toggleDoc(d.id)} />
                 {d.Name} <span className="muted">· {d.PageCount}p</span>
               </label>
             ))}
           </div>
+          {docs.some((d) => d.StorageMode === 'sovereign') && (
+            <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>
+              🔒 Sovereign documents (kept on your device) aren’t shown — a data room hosts the file, so it can’t include documents we don’t store.
+            </div>
+          )}
         </div>
 
         <div className="row">

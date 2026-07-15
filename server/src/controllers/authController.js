@@ -196,6 +196,51 @@ exports.resetPassword = asyncHandler(async (req, res) => {
 });
 
 /**
+ * Right to data portability (GDPR Art. 20). Returns the account's personal data
+ * as a portable JSON file: profile, workspaces, document metadata, envelopes sent
+ * (with signers/status), and saved recipients. Document/PDF bytes are not included
+ * (they may be encrypted or sovereign); the hashes + audit metadata are.
+ */
+exports.exportData = asyncHandler(async (req, res) => {
+  const {
+    DocCompany,
+    DocDocument,
+    DocEnvelope,
+    DocEnvelopeSigner,
+    DocRecipient
+  } = require('../models');
+  const userId = req.userId;
+  const user = await User.findByPk(userId);
+  const [companies, documents, envelopes, recipients] = await Promise.all([
+    DocCompany.findAll({ where: { OwnerId: userId } }),
+    DocDocument.findAll({ where: { OwnerId: userId } }),
+    DocEnvelope.findAll({ where: { CreatedBy: userId }, include: [{ model: DocEnvelopeSigner, as: 'Signers' }] }),
+    DocRecipient.findAll({ where: { OwnerId: userId } })
+  ]);
+
+  const data = {
+    exportedAt: new Date().toISOString(),
+    account: { name: user.Name, email: user.Email, company: user.Company, role: user.Role, createdAt: user.createdAt },
+    workspaces: companies.map((c) => ({ name: c.Name, description: c.Description, senderEmail: c.SenderEmail, replyToEmail: c.ReplyToEmail, createdAt: c.createdAt })),
+    documents: documents.map((d) => ({ name: d.Name, pages: d.PageCount, sizeBytes: d.SizeBytes, sha256: d.Sha256, storageMode: d.StorageMode, encrypted: d.Encrypted, createdAt: d.createdAt })),
+    envelopesSent: envelopes.map((e) => ({
+      subject: e.Subject,
+      status: e.Status,
+      createdAt: e.createdAt,
+      sentAt: e.SentAt,
+      completedAt: e.CompletedAt,
+      completedSha256: e.CompletedSha256,
+      signers: (e.Signers || []).map((s) => ({ name: s.Name, email: s.Email, status: s.Status, signedAt: s.SignedAt }))
+    })),
+    recipients: recipients.map((r) => ({ name: r.Name, email: r.Email, createdAt: r.createdAt }))
+  };
+
+  res.setHeader('Content-Type', 'application/json');
+  res.setHeader('Content-Disposition', 'attachment; filename="docsign-my-data.json"');
+  res.send(JSON.stringify(data, null, 2));
+});
+
+/**
  * Right to erasure (GDPR Art. 17). Requires the current password to confirm.
  * Purges personal/ancillary data + anonymizes the account; completed agreements
  * and their audit trail are retained for the legal period. Irreversible.

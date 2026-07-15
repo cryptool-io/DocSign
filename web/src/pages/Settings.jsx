@@ -16,6 +16,21 @@ export default function Settings() {
 
   const isAdmin = user?.role === 'admin';
 
+  const exportData = async () => {
+    try {
+      const r = await api.get('/auth/account/export', { responseType: 'blob' });
+      const url = URL.createObjectURL(r.data);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'docsign-my-data.json';
+      a.click();
+      URL.revokeObjectURL(url);
+      toast('Your data export downloaded');
+    } catch (err) {
+      toast(apiError(err), 'err');
+    }
+  };
+
   const deleteAccount = async () => {
     if (!delPassword) return toast('Enter your password to confirm.', 'err');
     if (!window.confirm(
@@ -144,6 +159,15 @@ export default function Settings() {
             </table>
           </div>
         )}
+      </div>
+
+      <div className="card mt">
+        <h2>Your data</h2>
+        <p className="muted mb">
+          Download a copy of your personal data — profile, workspaces, document details, envelopes you’ve
+          sent, and saved recipients — as a portable JSON file (GDPR data portability).
+        </p>
+        <button className="btn" onClick={exportData}>Download my data</button>
       </div>
 
       <div className="card mt" style={{ borderColor: '#e6b8b8' }}>

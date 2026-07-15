@@ -38,7 +38,11 @@ const serialize = (company) => ({
       systemSend: !Boolean(e.Provider && e.VerifiedAt) && systemCanSendFrom(e.Email),
       systemDomain: SYSTEM_DOMAIN,
       smtpHost: e.SmtpHost || null,
-      connectedAt: e.OAuthConnectedAt || null
+      connectedAt: e.OAuthConnectedAt || null,
+      // Set when a send through this mailbox failed (e.g. expired token) → UI shows
+      // a "reconnect needed" state.
+      needsReconnect: Boolean(e.ConnectionErrorAt),
+      connectionError: e.ConnectionError || null
     })),
   createdAt: company.createdAt
 });
@@ -262,6 +266,8 @@ exports.connectSmtp = asyncHandler(async (req, res) => {
       SmtpPasswordEnc: encryptSecret(password),
       VerifiedAt: new Date(),
       OAuthConnectedAt: new Date(),
+      ConnectionErrorAt: null,
+      ConnectionError: null,
       Label: fromName || (row && row.Label) || null
     };
     if (row) {

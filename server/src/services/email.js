@@ -230,6 +230,22 @@ const envelopeCompleted = ({ to, subject, downloadUrl, attachments, fromName, fr
     attachments
   });
 
+// Owner notification: a connected sending mailbox stopped working. Goes via the
+// system mailbox (the workspace mailbox is exactly what's broken).
+const mailboxDisconnected = ({ to, name, mailbox, workspace, reason }) =>
+  sendEmail({
+    to,
+    subject: `Action needed: reconnect ${mailbox}`,
+    html: layout(
+      'Reconnect your sending mailbox',
+      `<p>Hi ${name || 'there'},</p>
+       <p>DocSign couldn't send an email through <strong>${mailbox}</strong>${workspace ? ` (workspace “${workspace}”)` : ''}, so it fell back to the system mailbox. Until you reconnect it, recipients will see messages from the DocSign system address instead of your workspace.</p>
+       <p style="font-size:13px;color:#666">Reason: ${reason || 'the mailbox authorization is no longer valid'}.</p>
+       <p>Open Workspaces and reconnect the mailbox to fix this.</p>`,
+      { label: 'Open Workspaces', url: `${APP_BASE_URL}/workspaces` }
+    )
+  });
+
 module.exports = {
   DRY_RUN,
   SYSTEM_DOMAIN,
@@ -246,5 +262,6 @@ module.exports = {
   signerOtp,
   signerOtpHtml,
   envelopeCompleted,
-  envelopeCompletedHtml
+  envelopeCompletedHtml,
+  mailboxDisconnected
 };

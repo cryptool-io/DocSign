@@ -195,6 +195,14 @@ function CompanyCard({ company, providers, onChanged }) {
         )}
       </div>
 
+      {company.emails.some((e) => e.needsReconnect) && (
+        <div className="card mb" style={{ background: '#fef2f2', border: '1px solid #f3c1c1', color: '#b91c1c' }}>
+          <strong>⚠ A sending mailbox needs reconnecting.</strong> A recent email couldn’t be sent through your
+          connected mailbox (often an expired token), so it fell back to the system address. Reconnect it below
+          so emails go out from this workspace again.
+        </div>
+      )}
+
       {company.isOwner && (
       <form className="card mb" style={{ background: 'var(--panel, #fafafa)' }} onSubmit={saveBrand}>
         <div className="field" style={{ marginBottom: 8 }}>
@@ -289,7 +297,15 @@ function CompanyCard({ company, providers, onChanged }) {
               <td>
                 {e.email}
                 {e.isDefault && <span className="badge blue" style={{ marginLeft: 8 }}>default</span>}
-                {e.canSend ? (
+                {e.needsReconnect ? (
+                  <span
+                    className="badge"
+                    style={{ marginLeft: 8, background: '#fef2f2', color: '#b91c1c', border: '1px solid #f3c1c1' }}
+                    title={e.connectionError ? `Last error: ${e.connectionError}` : 'A send through this mailbox failed — reconnect it.'}
+                  >
+                    ⚠ reconnect needed
+                  </span>
+                ) : e.canSend ? (
                   <span className="badge green" style={{ marginLeft: 8 }}>
                     connected · {e.provider === 'google' ? 'Gmail' : e.provider === 'microsoft' ? 'Outlook' : e.provider === 'smtp' ? `mailbox${e.smtpHost ? ` (${e.smtpHost})` : ''}` : e.provider}
                   </span>

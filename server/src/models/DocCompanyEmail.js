@@ -31,7 +31,11 @@ module.exports = (sequelize, DataTypes) => {
       SmtpPort: { type: DataTypes.INTEGER, allowNull: true },
       SmtpSecure: { type: DataTypes.BOOLEAN, allowNull: true },
       SmtpUsername: { type: DataTypes.STRING, allowNull: true },
-      SmtpPasswordEnc: { type: DataTypes.TEXT, allowNull: true }
+      SmtpPasswordEnc: { type: DataTypes.TEXT, allowNull: true },
+      // Set when a send through this mailbox fails (e.g. expired token); cleared on
+      // a successful send or reconnect. Surfaces a "reconnect needed" state in the UI.
+      ConnectionErrorAt: { type: DataTypes.DATE, allowNull: true },
+      ConnectionError: { type: DataTypes.STRING, allowNull: true }
     },
     {
       sequelize,

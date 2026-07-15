@@ -80,7 +80,10 @@ exports.callback = asyncHandler(async (req, res) => {
       OAuthRefreshTokenEnc: encryptSecret(tokens.refreshToken),
       OAuthConnectedAt: new Date(),
       OAuthScope: tokens.scope,
-      VerifiedAt: new Date()
+      VerifiedAt: new Date(),
+      // A fresh connection clears any prior "reconnect needed" flag.
+      ConnectionErrorAt: null,
+      ConnectionError: null
     };
     let target = await DocCompanyEmail.findOne({ where: { DocCompanyId: company.id, Email: tokens.email }, transaction: t });
     if (!target) target = await DocCompanyEmail.findOne({ where: { DocCompanyId: company.id, IsDefault: true }, transaction: t });

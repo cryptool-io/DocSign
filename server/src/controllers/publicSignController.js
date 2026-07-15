@@ -18,6 +18,7 @@ const { verifyAccessToken } = require('../services/authTokens');
 const { appendAuditEvent } = require('../services/docroom/hashChain');
 const { finalizeEnvelope } = require('../services/docroom/completion');
 const { purgeEnvelopeStorage } = require('../services/retention');
+const { flagConnectionError, clearConnectionError } = require('../services/mailboxHealth');
 const { signerOtpHtml, sendEmail, sendViaSmtp, envelopeCompletedHtml, signatureRequestHtml, APP_BASE_URL } = require('../services/email');
 const oauth = require('../services/emailOAuth');
 const { resolveSenderIdentity, resolveSendingConnection } = require('./envelopeController');
@@ -164,12 +165,16 @@ const sendWithSender = async ({ identity, connection }, { to, subject, html, att
   try {
     if (identity) {
       const msg = { to, subject, html, replyTo: identity.replyTo, attachments };
-      if (connection && connection.kind === 'smtp') return await sendViaSmtp(connection, msg);
-      if (connection && connection.kind === 'oauth') return await oauth.sendViaConnection(connection, msg);
-      return await sendEmail({ ...msg, fromName: identity.fromName, fromEmail: identity.fromEmail });
+      let result;
+      if (connection && connection.kind === 'smtp') result = await sendViaSmtp(connection, msg);
+      else if (connection && connection.kind === 'oauth') result = await oauth.sendViaConnection(connection, msg);
+      else result = await sendEmail({ ...msg, fromName: identity.fromName, fromEmail: identity.fromEmail });
+      if (connection && connection.emailId) clearConnectionError(connection.emailId);
+      return result;
     }
   } catch (e) {
     console.warn(`[docsign] workspace send failed, using system mailbox: ${e.message}`);
+    if (connection && connection.emailId) flagConnectionError(connection.emailId, e.message);
   }
   // Fallback via the system mailbox (its own verified domain). We can't legitimately
   // put the workspace's address in From, but we keep its display name + reply-to so

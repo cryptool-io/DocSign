@@ -13,6 +13,7 @@ const { generateOpaqueToken } = require('../services/docroom/tokens');
 const { appendAuditEvent } = require('../services/docroom/hashChain');
 const { APP_BASE_URL, signatureRequest, signatureRequestHtml, systemCanSendFrom, sendViaSmtp } = require('../services/email');
 const oauth = require('../services/emailOAuth');
+const { flagConnectionError, clearConnectionError } = require('../services/mailboxHealth');
 const { decryptSecret } = require('../services/secretStore');
 const { asyncHandler, notFound, badRequest, forbidden } = require('../utils/http');
 const { resolveCompanyId } = require('../utils/companyScope');
@@ -35,6 +36,7 @@ const connectionFromRecord = (record, fromEmail) => {
     if (!record.SmtpPasswordEnc) throw badRequest(`Reconnect the mailbox for ${record.Email}: its password is missing.`, 'sender_not_connected');
     return {
       kind: 'smtp',
+      emailId: record.id,
       host: record.SmtpHost,
       port: record.SmtpPort,
       secure: record.SmtpSecure,
@@ -48,6 +50,7 @@ const connectionFromRecord = (record, fromEmail) => {
   if (!oauth.isConfigured(record.Provider)) throw badRequest(`${record.Provider} email isn't configured on this server.`, 'provider_not_configured');
   return {
     kind: 'oauth',
+    emailId: record.id,
     provider: record.Provider,
     refreshToken: decryptSecret(record.OAuthRefreshTokenEnc),
     fromEmail
@@ -419,28 +422,39 @@ exports.send = asyncHandler(async (req, res) => {
   if (!isLink) {
     await Promise.allSettled(
       active.map((s) => {
+        // Fall back to the system mailbox, keeping the workspace name + reply-to
+        // (From stays a system-domain address; we can't legitimately send as the
+        // workspace's domain without its own mailbox).
+        const systemFallback = () =>
+          signatureRequest({
+            to: s.Email,
+            signerName: s.Name,
+            senderName: identity.fromName,
+            fromEmail: connection ? undefined : identity.fromEmail,
+            replyTo: identity.replyTo,
+            subject: env.Subject,
+            message: env.Message,
+            signUrl: signUrl(s.AccessToken),
+            logoUrl: identity.logoUrl
+          });
+
         if (connection) {
           const msg = {
             to: s.Email,
             subject: env.Subject || `${identity.fromName} requested your signature`,
-            html: signatureRequestHtml({ signerName: s.Name, senderName: identity.fromName, message: env.Message, signUrl: signUrl(s.AccessToken), logoUrl: identity.logoUrl }),
+            html: signatureRequestHtml({ signerName: s.Name, senderName: identity.fromName, message: env.Message, signUrl: signUrl(s.AccessToken), logoUrl: identity.logoUrl, contactEmail: identity.replyTo }),
             replyTo: identity.replyTo
           };
-          // Send through the user's own connected mailbox: SMTP or OAuth.
-          if (connection.kind === 'smtp') return sendViaSmtp(connection, msg);
-          return oauth.sendViaConnection(connection, msg);
+          const viaConn = connection.kind === 'smtp' ? sendViaSmtp(connection, msg) : oauth.sendViaConnection(connection, msg);
+          return viaConn
+            .then((r) => { if (connection.emailId) clearConnectionError(connection.emailId); return r; })
+            .catch((e) => {
+              console.warn(`[docsign] workspace send failed, using system mailbox: ${e.message}`);
+              if (connection.emailId) flagConnectionError(connection.emailId, e.message);
+              return systemFallback();
+            });
         }
-        return signatureRequest({
-          to: s.Email,
-          signerName: s.Name,
-          senderName: identity.fromName,
-          fromEmail: identity.fromEmail,
-          replyTo: identity.replyTo,
-          subject: env.Subject,
-          message: env.Message,
-          signUrl: signUrl(s.AccessToken),
-          logoUrl: identity.logoUrl
-        });
+        return systemFallback();
       })
     );
   }

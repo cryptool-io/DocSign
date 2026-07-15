@@ -63,6 +63,19 @@ export default function Inbox() {
     }
   };
 
+  // Hide an envelope from my personal inbox (To sign / Signed by you). Does not
+  // affect the sender's copy.
+  const dismiss = async (envelopeId) => {
+    if (!confirm('Remove this from your list? It stays with the sender; you just won’t see it here.')) return;
+    try {
+      await api.post(`/envelopes/${envelopeId}/inbox/dismiss`);
+      toast('Removed from your list');
+      load();
+    } catch (err) {
+      toast(apiError(err), 'err');
+    }
+  };
+
   const download = async (envelopeId, subject) => {
     try {
       const r = await api.get(`/envelopes/${envelopeId}/completed-file`, { responseType: 'blob' });
@@ -186,19 +199,24 @@ export default function Inbox() {
                     {e.signedAt && <div className="muted">{fmtDate(e.signedAt)}</div>}
                   </td>
                   <td style={{ textAlign: 'right' }}>
-                    {tab === 'pending' ? (
-                      // Same tab: after signing, the "Back to DocSign" button
-                      // returns here and the list reloads with the new status.
-                      <a className="btn sm primary" href={e.signUrl}>
-                        Review &amp; sign
-                      </a>
-                    ) : e.hasCompletedFile ? (
-                      <button className="btn sm" onClick={() => download(e.envelopeId, e.subject)}>
-                        Download
+                    <div className="wrap-actions" style={{ justifyContent: 'flex-end' }}>
+                      {tab === 'pending' ? (
+                        // Same tab: after signing, the "Back to DocSign" button
+                        // returns here and the list reloads with the new status.
+                        <a className="btn sm primary" href={e.signUrl}>
+                          Review &amp; sign
+                        </a>
+                      ) : e.hasCompletedFile ? (
+                        <button className="btn sm" onClick={() => download(e.envelopeId, e.subject)}>
+                          Download
+                        </button>
+                      ) : (
+                        <span className="muted">Awaiting others</span>
+                      )}
+                      <button className="btn sm danger" title="Remove from your list" onClick={() => dismiss(e.envelopeId)}>
+                        Remove
                       </button>
-                    ) : (
-                      <span className="muted">Awaiting others</span>
-                    )}
+                    </div>
                   </td>
                 </tr>
               ))}

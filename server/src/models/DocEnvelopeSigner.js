@@ -51,6 +51,8 @@ module.exports = (sequelize, DataTypes) => {
       IpAddress: { type: DataTypes.STRING(45), allowNull: true },
       UserAgent: { type: DataTypes.TEXT, allowNull: true },
       NotifiedAt: { type: DataTypes.DATE, allowNull: true },
+      // Signer hid this from their personal inbox (doesn't affect the sender's copy).
+      DismissedAt: { type: DataTypes.DATE, allowNull: true },
       RemindedAt: { type: DataTypes.DATE, allowNull: true }
     },
     {

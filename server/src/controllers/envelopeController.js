@@ -483,7 +483,8 @@ exports.inbox = asyncHandler(async (req, res) => {
   const { Op } = require('sequelize');
   const wantSigned = req.query.status === 'signed';
   const signerWhere = {
-    [Op.or]: [{ Email: req.user.Email }, { SignedByUserId: req.userId }]
+    [Op.or]: [{ Email: req.user.Email }, { SignedByUserId: req.userId }],
+    DismissedAt: null
   };
   signerWhere.Status = wantSigned ? 'signed' : { [Op.in]: ['pending', 'viewed'] };
 
@@ -515,6 +516,25 @@ exports.inbox = asyncHandler(async (req, res) => {
     });
   }
   res.json({ data });
+});
+
+/**
+ * Remove an envelope from the signer's personal inbox (To sign / Signed by you).
+ * Non-destructive: only hides the current user's signer row; the sender's copy and
+ * the audit trail are untouched.
+ */
+exports.dismissFromInbox = asyncHandler(async (req, res) => {
+  const [count] = await DocEnvelopeSigner.update(
+    { DismissedAt: new Date() },
+    {
+      where: {
+        DocEnvelopeId: req.params.id,
+        [Op.or]: [{ Email: req.user.Email }, { SignedByUserId: req.userId }]
+      }
+    }
+  );
+  if (!count) throw notFound('Not found in your inbox');
+  res.json({ ok: true });
 });
 
 /** Return the per-signer signing links for an already-created envelope. */

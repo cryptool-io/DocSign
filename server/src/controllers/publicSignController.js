@@ -171,7 +171,17 @@ const sendWithSender = async ({ identity, connection }, { to, subject, html, att
   } catch (e) {
     console.warn(`[docsign] workspace send failed, using system mailbox: ${e.message}`);
   }
-  return sendEmail({ to, subject, html, attachments });
+  // Fallback via the system mailbox (its own verified domain). We can't legitimately
+  // put the workspace's address in From, but we keep its display name + reply-to so
+  // the message still reads as the workspace and replies reach it.
+  return sendEmail({
+    to,
+    subject,
+    html,
+    attachments,
+    fromName: identity?.fromName,
+    replyTo: identity?.replyTo
+  });
 };
 
 const brandOf = (identity) =>

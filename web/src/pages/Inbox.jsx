@@ -17,6 +17,14 @@ export default function Inbox() {
   const toast = useToast();
   const activeId = useCompany((s) => s.activeId);
 
+  // Reset the list on every tab switch so we never render one tab's data (whose
+  // shape differs) with another tab's layout during the moment before the refetch.
+  const switchTab = (t) => {
+    if (t === tab) return;
+    setItems(null);
+    setTab(t);
+  };
+
   const load = () => {
     setItems(null);
     if (tab === 'sent') {
@@ -82,13 +90,13 @@ export default function Inbox() {
       </div>
 
       <div className="flex mb">
-        <button className={`btn sm ${tab === 'sent' ? 'primary' : ''}`} onClick={() => setTab('sent')}>
+        <button className={`btn sm ${tab === 'sent' ? 'primary' : ''}`} onClick={() => switchTab('sent')}>
           Sent by me
         </button>
-        <button className={`btn sm ${tab === 'pending' ? 'primary' : ''}`} onClick={() => setTab('pending')}>
+        <button className={`btn sm ${tab === 'pending' ? 'primary' : ''}`} onClick={() => switchTab('pending')}>
           To sign
         </button>
-        <button className={`btn sm ${tab === 'signed' ? 'primary' : ''}`} onClick={() => setTab('signed')}>
+        <button className={`btn sm ${tab === 'signed' ? 'primary' : ''}`} onClick={() => switchTab('signed')}>
           Signed by you
         </button>
       </div>
@@ -117,8 +125,9 @@ export default function Inbox() {
             </thead>
             <tbody>
               {items.map((e) => {
-                const signed = e.signers.filter((s) => s.status === 'signed').length;
-                const ordered = [...e.signers].sort((a, b) => a.signingOrder - b.signingOrder);
+                const sigs = e.signers || [];
+                const signed = sigs.filter((s) => s.status === 'signed').length;
+                const ordered = [...sigs].sort((a, b) => a.signingOrder - b.signingOrder);
                 return (
                   <tr key={e.id} style={{ cursor: 'pointer' }} onClick={() => nav(`/envelopes/${e.id}`)}>
                     <td>
@@ -135,7 +144,7 @@ export default function Inbox() {
                     </td>
                     <td>
                       <Badge status={e.status} />
-                      <div className="muted" style={{ fontSize: 12 }}>{signed}/{e.signers.length} signed</div>
+                      <div className="muted" style={{ fontSize: 12 }}>{signed}/{sigs.length} signed</div>
                     </td>
                     <td className="muted">{e.sentAt ? fmtDate(e.sentAt) : 'Draft'}</td>
                     <td style={{ textAlign: 'right' }} onClick={(ev) => ev.stopPropagation()}>

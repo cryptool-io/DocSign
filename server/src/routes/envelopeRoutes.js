@@ -12,6 +12,8 @@ router.use(requireAuth);
 router.get('/', controller.list);
 // Personal signing inbox — must precede /:id so "inbox" isn't read as an id.
 router.get('/inbox', controller.inbox);
+// Completed documents (sender or signer). Precede /:id so "completed" isn't an id.
+router.get('/completed', controller.completed);
 router.post('/', validate(schemas.create), controller.create);
 router.get('/:id', validate(idParam, 'params'), controller.get);
 router.post('/:id/send', validate(idParam, 'params'), controller.send);

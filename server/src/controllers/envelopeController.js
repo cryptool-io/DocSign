@@ -519,6 +519,39 @@ exports.inbox = asyncHandler(async (req, res) => {
 });
 
 /**
+ * Fully-executed documents the user is part of — as sender OR signer. Shows the
+ * signed PDF for download when it's still on the server (encrypted/retained docs);
+ * others were emailed to the parties and purged for privacy (hash kept as proof).
+ */
+exports.completed = asyncHandler(async (req, res) => {
+  const seen = new Map();
+  const add = (env, doc, role) => {
+    if (!env || seen.has(env.id)) return;
+    seen.set(env.id, {
+      envelopeId: env.id,
+      subject: env.Subject,
+      documentName: doc ? doc.Name : null,
+      completedAt: env.CompletedAt,
+      hasCompletedFile: Boolean(env.CompletedFileKey),
+      completedSha256: env.CompletedSha256 || null,
+      role
+    });
+  };
+
+  const sent = await DocEnvelope.findAll({ where: { CreatedBy: req.userId, Status: 'completed' } });
+  for (const env of sent) add(env, await DocDocument.findByPk(env.DocDocumentId), 'sender');
+
+  const rows = await DocEnvelopeSigner.findAll({
+    where: { [Op.or]: [{ Email: req.user.Email }, { SignedByUserId: req.userId }], DismissedAt: null },
+    include: [{ model: DocEnvelope, as: 'Envelope', where: { Status: 'completed' }, required: true }]
+  });
+  for (const s of rows) add(s.Envelope, await DocDocument.findByPk(s.Envelope.DocDocumentId), 'signer');
+
+  const data = [...seen.values()].sort((a, b) => new Date(b.completedAt || 0) - new Date(a.completedAt || 0));
+  res.json({ data });
+});
+
+/**
  * Remove an envelope from the signer's personal inbox (To sign / Signed by you).
  * Non-destructive: only hides the current user's signer row; the sender's copy and
  * the audit trail are untouched.

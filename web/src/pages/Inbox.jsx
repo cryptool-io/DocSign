@@ -30,6 +30,8 @@ export default function Inbox() {
     if (tab === 'sent') {
       const q = companyParam();
       api.get(`/envelopes${q ? `?${q}` : ''}`).then((r) => setItems(r.data.data));
+    } else if (tab === 'completed') {
+      api.get('/envelopes/completed').then((r) => setItems(r.data.data));
     } else {
       api.get(`/envelopes/inbox${tab === 'signed' ? '?status=signed' : ''}`).then((r) => setItems(r.data.data));
     }
@@ -112,6 +114,9 @@ export default function Inbox() {
         <button className={`btn sm ${tab === 'signed' ? 'primary' : ''}`} onClick={() => switchTab('signed')}>
           Signed by you
         </button>
+        <button className={`btn sm ${tab === 'completed' ? 'primary' : ''}`} onClick={() => switchTab('completed')}>
+          Completed
+        </button>
       </div>
 
       {!items ? (
@@ -122,7 +127,9 @@ export default function Inbox() {
             ? 'Nothing sent for signature yet.'
             : tab === 'pending'
               ? 'Nothing awaiting your signature.'
-              : "You haven't signed anything yet."}
+              : tab === 'completed'
+                ? 'No completed documents yet.'
+                : "You haven't signed anything yet."}
         </div>
       ) : tab === 'sent' ? (
         <div className="card" style={{ padding: 0 }}>
@@ -174,6 +181,48 @@ export default function Inbox() {
                   </tr>
                 );
               })}
+            </tbody>
+          </table>
+        </div>
+      ) : tab === 'completed' ? (
+        <div className="card" style={{ padding: 0 }}>
+          <table>
+            <thead>
+              <tr>
+                <th>Document</th>
+                <th>Completed</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {items.map((e) => (
+                <tr key={e.envelopeId}>
+                  <td>
+                    <strong>{e.documentName || e.subject}</strong>
+                    <div className="muted">
+                      {e.subject}
+                      <span className="badge" style={{ marginLeft: 8, background: '#eef2ff', color: '#3730a3', border: '1px solid #dfe3fb' }}>
+                        {e.role === 'sender' ? 'you sent' : 'you signed'}
+                      </span>
+                    </div>
+                  </td>
+                  <td className="muted">{e.completedAt ? fmtDate(e.completedAt) : '—'}</td>
+                  <td style={{ textAlign: 'right' }}>
+                    {e.hasCompletedFile ? (
+                      <button className="btn sm primary" onClick={() => download(e.envelopeId, e.subject)}>
+                        Download signed PDF
+                      </button>
+                    ) : (
+                      <span
+                        className="muted"
+                        title={e.completedSha256 ? `Verify any copy by its SHA-256: ${e.completedSha256}` : undefined}
+                      >
+                        Emailed to parties · not stored
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              ))}
             </tbody>
           </table>
         </div>

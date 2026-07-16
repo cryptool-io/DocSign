@@ -148,6 +148,9 @@ async function runRetention() {
     // to send cross-brand.
     const sov = await purgeSovereignLeftovers();
     if (sov) console.log(`[retention] purged transient bytes for ${sov} sovereign document(s)`);
+    // Proactively catch dead workspace mailboxes and alert their owner.
+    const broken = await require('./mailboxHealth').sweepMailboxHealth();
+    if (broken) console.log(`[retention] ${broken} workspace mailbox(es) need reconnecting`);
   } catch (err) {
     console.error('[retention] sweep failed:', err.message);
   }

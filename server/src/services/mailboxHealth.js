@@ -10,6 +10,8 @@
 const { Op } = require('sequelize');
 const { DocCompanyEmail } = require('../models');
 const email = require('./email');
+const oauth = require('./emailOAuth');
+const { decryptSecret } = require('./secretStore');
 
 /** Flag a mailbox as failing. Emails the owner only on the transition to failing. */
 async function flagConnectionError(emailId, message) {
@@ -39,4 +41,42 @@ async function clearConnectionError(emailId) {
   ).catch(() => {});
 }
 
-module.exports = { flagConnectionError, clearConnectionError };
+/** Exercise one mailbox's stored credential. Throws if it no longer works. */
+async function pingMailbox(row) {
+  if (row.Provider === 'smtp') {
+    return email.verifySmtp({
+      host: row.SmtpHost,
+      port: row.SmtpPort,
+      secure: row.SmtpSecure,
+      user: row.SmtpUsername || row.Email,
+      pass: decryptSecret(row.SmtpPasswordEnc)
+    });
+  }
+  return oauth.refreshAccessToken(row.Provider, decryptSecret(row.OAuthRefreshTokenEnc));
+}
+
+/**
+ * Proactive daily check of every connected workspace mailbox, so a dead credential
+ * is caught (and the owner emailed) BEFORE it silently pauses someone's signing
+ * emails — rather than only when a send happens to fail.
+ */
+async function sweepMailboxHealth() {
+  const rows = await DocCompanyEmail.scope('withTokens').findAll({
+    where: { Provider: { [Op.ne]: null }, VerifiedAt: { [Op.ne]: null } },
+    limit: 500
+  });
+  let broken = 0;
+  for (const row of rows) {
+    if (!(row.OAuthRefreshTokenEnc || row.SmtpPasswordEnc)) continue;
+    try {
+      await pingMailbox(row);
+      await clearConnectionError(row.id);
+    } catch (e) {
+      await flagConnectionError(row.id, e.message); // emails the owner on first failure
+      broken += 1;
+    }
+  }
+  return broken;
+}
+
+module.exports = { flagConnectionError, clearConnectionError, sweepMailboxHealth };

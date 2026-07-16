@@ -235,13 +235,17 @@ const envelopeCompleted = ({ to, subject, downloadUrl, attachments, fromName, fr
 const mailboxDisconnected = ({ to, name, mailbox, workspace, reason }) =>
   sendEmail({
     to,
-    subject: `Action needed: reconnect ${mailbox}`,
+    subject: `Action needed: ${workspace ? `“${workspace}” — ` : ''}reconnect ${mailbox}`,
     html: layout(
-      'Reconnect your sending mailbox',
+      'A workspace mailbox stopped working',
       `<p>Hi ${name || 'there'},</p>
-       <p>DocSign couldn't send an email through <strong>${mailbox}</strong>${workspace ? ` (workspace “${workspace}”)` : ''}, so it fell back to the system mailbox. Until you reconnect it, recipients will see messages from the DocSign system address instead of your workspace.</p>
-       <p style="font-size:13px;color:#666">Reason: ${reason || 'the mailbox authorization is no longer valid'}.</p>
-       <p>Open Workspaces and reconnect the mailbox to fix this.</p>`,
+       <table style="border-collapse:collapse;margin:12px 0;font-size:14px">
+         <tr><td style="padding:4px 12px 4px 0;color:#666">Workspace</td><td><strong>${workspace || '—'}</strong></td></tr>
+         <tr><td style="padding:4px 12px 4px 0;color:#666">Mailbox</td><td><strong>${mailbox}</strong></td></tr>
+         <tr><td style="padding:4px 12px 4px 0;color:#666">Reason</td><td>${reason || 'the mailbox authorization is no longer valid'}</td></tr>
+       </table>
+       <p><strong>Emails from this workspace are paused until you reconnect it.</strong> We will never send them from another workspace's address, so nothing goes out under the wrong brand.</p>
+       <p>Reconnect the mailbox to resume sending.</p>`,
       { label: 'Open Workspaces', url: `${APP_BASE_URL}/workspaces` }
     )
   });

@@ -85,6 +85,27 @@ const resolveSendingConnection = async (ownerId, companyId, fromEmail) => {
   return connectionFromRecord(connected, fromEmail);
 };
 
+/**
+ * Every OTHER connected mailbox in the workspace, to use as same-brand backups if
+ * the primary send fails — each sends FROM its own real address (e.g. micky@…).
+ * We never fall back across brands (to the Cryptool system mailbox) for a workspace.
+ */
+const resolveBackupConnections = async (ownerId, companyId, excludeEmailId) => {
+  if (!companyId) return [];
+  const rows = await DocCompanyEmail.scope('withTokens').findAll({
+    where: { Provider: { [Op.ne]: null }, VerifiedAt: { [Op.ne]: null } },
+    include: [{ association: 'Company', where: { id: companyId, OwnerId: ownerId }, required: true }],
+    order: [['IsDefault', 'DESC']]
+  });
+  const out = [];
+  for (const r of rows) {
+    if (r.id === excludeEmailId) continue; // primary already tried
+    if (!(r.OAuthRefreshTokenEnc || r.SmtpPasswordEnc)) continue;
+    out.push({ connection: connectionFromRecord(r, r.Email), fromEmail: r.Email });
+  }
+  return out;
+};
+
 const signUrl = (token) => `${APP_BASE_URL}/sign/${token}`;
 
 // Resolve the sending identity (name + from address) for an envelope. Falls back
@@ -398,6 +419,10 @@ exports.send = asyncHandler(async (req, res) => {
     }
     if (connection) connection.fromName = identity.fromName;
   }
+  // Same-brand backup mailboxes to try if the primary send fails (never Cryptool).
+  const backups = isLink
+    ? []
+    : await resolveBackupConnections(req.userId, env.DocCompanyId, connection ? connection.emailId : null).catch(() => []);
 
   await sequelize.transaction(async (t) => {
     await env.update({ Status: 'sent', SentAt: new Date() }, { transaction: t });
@@ -420,41 +445,45 @@ exports.send = asyncHandler(async (req, res) => {
   });
 
   if (!isLink) {
+    // A workspace's mail must go out ONLY from its own real addresses. The system
+    // (Cryptool) mailbox may send it ONLY when the workspace's own from-address is
+    // on our verified domain — so the visible From stays that address, never a
+    // foreign brand. Otherwise we try same-brand backup mailboxes, else don't send.
+    const canSystem = systemCanSendFrom(identity.fromEmail);
     await Promise.allSettled(
-      active.map((s) => {
-        // Fall back to the system mailbox, keeping the workspace name + reply-to
-        // (From stays a system-domain address; we can't legitimately send as the
-        // workspace's domain without its own mailbox).
-        const systemFallback = () =>
-          signatureRequest({
-            to: s.Email,
-            signerName: s.Name,
-            senderName: identity.fromName,
-            fromEmail: connection ? undefined : identity.fromEmail,
-            replyTo: identity.replyTo,
-            subject: env.Subject,
-            message: env.Message,
-            signUrl: signUrl(s.AccessToken),
-            logoUrl: identity.logoUrl
-          });
+      active.map(async (s) => {
+        const msg = {
+          to: s.Email,
+          subject: env.Subject || `${identity.fromName} requested your signature`,
+          html: signatureRequestHtml({ signerName: s.Name, senderName: identity.fromName, message: env.Message, signUrl: signUrl(s.AccessToken), logoUrl: identity.logoUrl, contactEmail: identity.replyTo }),
+          replyTo: identity.replyTo
+        };
+        // Ordered attempts: the primary connection, then any same-brand backups.
+        const attempts = [];
+        if (connection) attempts.push({ conn: connection, fromEmail: identity.fromEmail });
+        for (const b of backups) attempts.push({ conn: b.connection, fromEmail: b.fromEmail });
 
-        if (connection) {
-          const msg = {
-            to: s.Email,
-            subject: env.Subject || `${identity.fromName} requested your signature`,
-            html: signatureRequestHtml({ signerName: s.Name, senderName: identity.fromName, message: env.Message, signUrl: signUrl(s.AccessToken), logoUrl: identity.logoUrl, contactEmail: identity.replyTo }),
-            replyTo: identity.replyTo
-          };
-          const viaConn = connection.kind === 'smtp' ? sendViaSmtp(connection, msg) : oauth.sendViaConnection(connection, msg);
-          return viaConn
-            .then((r) => { if (connection.emailId) clearConnectionError(connection.emailId); return r; })
-            .catch((e) => {
-              console.warn(`[docsign] workspace send failed, using system mailbox: ${e.message}`);
-              if (connection.emailId) flagConnectionError(connection.emailId, e.message);
-              return systemFallback();
-            });
+        for (const a of attempts) {
+          try {
+            const m = { ...msg, fromName: identity.fromName, fromEmail: a.fromEmail };
+            const r = a.conn.kind === 'smtp' ? await sendViaSmtp(a.conn, m) : await oauth.sendViaConnection(a.conn, m);
+            if (a.conn.emailId) clearConnectionError(a.conn.emailId);
+            return r;
+          } catch (e) {
+            console.warn(`[docsign] send via ${a.fromEmail} failed: ${e.message}`);
+            if (a.conn.emailId) flagConnectionError(a.conn.emailId, e.message);
+          }
         }
-        return systemFallback();
+        // No working workspace mailbox.
+        if (canSystem) {
+          return signatureRequest({
+            to: s.Email, signerName: s.Name, senderName: identity.fromName,
+            fromEmail: identity.fromEmail, replyTo: identity.replyTo,
+            subject: env.Subject, message: env.Message, signUrl: signUrl(s.AccessToken), logoUrl: identity.logoUrl
+          });
+        }
+        console.error(`[docsign] no working mailbox for "${identity.fromName}" — not emailing ${s.Email} (won't send as system).`);
+        return { skipped: true };
       })
     );
   }
@@ -653,3 +682,4 @@ exports.remind = asyncHandler(async (req, res) => {
 // the signing request (see publicSignController.requestOtp).
 exports.resolveSenderIdentity = resolveSenderIdentity;
 exports.resolveSendingConnection = resolveSendingConnection;
+exports.resolveBackupConnections = resolveBackupConnections;

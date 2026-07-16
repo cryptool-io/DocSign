@@ -19,9 +19,9 @@ const { appendAuditEvent } = require('../services/docroom/hashChain');
 const { finalizeEnvelope } = require('../services/docroom/completion');
 const { purgeEnvelopeStorage } = require('../services/retention');
 const { flagConnectionError, clearConnectionError } = require('../services/mailboxHealth');
-const { signerOtpHtml, sendEmail, sendViaSmtp, envelopeCompletedHtml, signatureRequestHtml, APP_BASE_URL } = require('../services/email');
+const { signerOtpHtml, sendEmail, sendViaSmtp, envelopeCompletedHtml, signatureRequestHtml, systemCanSendFrom, APP_BASE_URL } = require('../services/email');
 const oauth = require('../services/emailOAuth');
-const { resolveSenderIdentity, resolveSendingConnection } = require('./envelopeController');
+const { resolveSenderIdentity, resolveSendingConnection, resolveBackupConnections } = require('./envelopeController');
 const { asyncHandler, notFound, badRequest, forbidden, unauthorized, tooMany, clientIp } = require('../utils/http');
 
 const OTP_TTL_MS = 10 * 60 * 1000;
@@ -148,7 +148,7 @@ exports.start = asyncHandler(async (req, res) => {
 // Resolve the workspace sender identity + connected mailbox for an envelope
 // (both null for a personal envelope → system mailbox).
 const envelopeSender = async (env) => {
-  if (!env.DocCompanyId) return { identity: null, connection: null };
+  if (!env.DocCompanyId) return { identity: null, connection: null, backups: [] };
   const identity = await resolveSenderIdentity(env.CreatedBy, env.DocCompanyId, env.FromEmail, { Name: 'DocSign' });
   let connection = null;
   try {
@@ -156,37 +156,48 @@ const envelopeSender = async (env) => {
   } catch {
     connection = null;
   }
-  return { identity, connection };
+  const backups = await resolveBackupConnections(
+    env.CreatedBy,
+    env.DocCompanyId,
+    connection ? connection.emailId : null
+  ).catch(() => []);
+  return { identity, connection, backups };
 };
 
 // Send one message via the envelope's workspace mailbox, falling back to the
 // system mailbox on any failure so delivery never gets stuck.
-const sendWithSender = async ({ identity, connection }, { to, subject, html, attachments }) => {
-  try {
-    if (identity) {
-      const msg = { to, subject, html, replyTo: identity.replyTo, attachments };
-      let result;
-      if (connection && connection.kind === 'smtp') result = await sendViaSmtp(connection, msg);
-      else if (connection && connection.kind === 'oauth') result = await oauth.sendViaConnection(connection, msg);
-      else result = await sendEmail({ ...msg, fromName: identity.fromName, fromEmail: identity.fromEmail });
-      if (connection && connection.emailId) clearConnectionError(connection.emailId);
+// Send through the workspace's OWN mailboxes only. A workspace's mail must never go
+// out as the Cryptool system address (cross-brand). Order: the primary connection,
+// then same-brand backup mailboxes (each from its own real address). The system
+// mailbox is used ONLY when there's no workspace, OR the workspace's own from-address
+// is on our verified domain (so the visible From is still that address, not a
+// foreign brand). Otherwise we don't send — the mailbox-health alert prompts a reconnect.
+const sendWithSender = async ({ identity, connection, backups = [] }, { to, subject, html, attachments }) => {
+  if (!identity) return sendEmail({ to, subject, html, attachments }); // personal / no workspace
+
+  const attempts = [];
+  if (connection) attempts.push({ conn: connection, fromEmail: identity.fromEmail });
+  for (const b of backups) attempts.push({ conn: b.connection, fromEmail: b.fromEmail });
+
+  for (const a of attempts) {
+    try {
+      const msg = { to, subject, html, attachments, replyTo: identity.replyTo, fromName: identity.fromName, fromEmail: a.fromEmail };
+      const result = a.conn.kind === 'smtp' ? await sendViaSmtp(a.conn, msg) : await oauth.sendViaConnection(a.conn, msg);
+      if (a.conn.emailId) clearConnectionError(a.conn.emailId);
       return result;
+    } catch (e) {
+      console.warn(`[docsign] send via ${a.fromEmail} failed: ${e.message}`);
+      if (a.conn.emailId) flagConnectionError(a.conn.emailId, e.message);
     }
-  } catch (e) {
-    console.warn(`[docsign] workspace send failed, using system mailbox: ${e.message}`);
-    if (connection && connection.emailId) flagConnectionError(connection.emailId, e.message);
   }
-  // Fallback via the system mailbox (its own verified domain). We can't legitimately
-  // put the workspace's address in From, but we keep its display name + reply-to so
-  // the message still reads as the workspace and replies reach it.
-  return sendEmail({
-    to,
-    subject,
-    html,
-    attachments,
-    fromName: identity?.fromName,
-    replyTo: identity?.replyTo
-  });
+
+  // No working workspace mailbox.
+  if (systemCanSendFrom(identity.fromEmail)) {
+    // The workspace address is on our verified domain → From stays that address.
+    return sendEmail({ to, subject, html, attachments, fromName: identity.fromName, fromEmail: identity.fromEmail, replyTo: identity.replyTo });
+  }
+  console.error(`[docsign] no working mailbox for workspace "${identity.fromName}" — skipping "${subject}" (won't send as system).`);
+  return { skipped: true };
 };
 
 const brandOf = (identity) =>
@@ -213,9 +224,9 @@ exports.requestOtp = asyncHandler(async (req, res) => {
     OtpAttempts: 0
   });
 
-  // Send the code from the SAME workspace mailbox + brand as the signing request
-  // (not the generic system mailbox). Falls back to the system mailbox on any
-  // problem so verification never gets stuck.
+  // Send the code from the SAME workspace mailbox + brand as the signing request.
+  // Never from the generic system mailbox — a workspace's mail must only ever come
+  // from its own addresses (same-brand backups are tried first).
   await sendOtpBranded(env, signer, code);
   res.json({ ok: true, email: signer.Email.replace(/(.{2}).*(@.*)/, '$1***$2') });
 });
@@ -526,12 +537,17 @@ exports.submit = asyncHandler(async (req, res) => {
         ? [{ filename: finalized.fileName || 'signed.pdf', content: finalized.pdfBuffer, contentType: 'application/pdf' }]
         : undefined;
     const html = envelopeCompletedHtml(Boolean(attachments), null, brandOf(sender.identity));
-    await Promise.allSettled(
+    const results = await Promise.allSettled(
       recipients.map((to) => sendWithSender(sender, { to, subject: `Completed: ${env.Subject}`, html, attachments }))
     );
-    // Privacy: now that the signed PDF has been delivered to every party, drop the
-    // stored bytes. We keep only the SHA-256 + audit trail as tamper-evidence.
-    await purgeEnvelopeStorage(env.id).catch(() => {});
+    // Privacy: once the signed PDF has actually reached the parties, drop the stored
+    // bytes (only the SHA-256 + audit trail remain as tamper-evidence). If NOTHING
+    // could be delivered (e.g. the workspace mailbox is down and we refuse to send
+    // cross-brand), keep the file so it isn't lost — the owner is alerted to
+    // reconnect and can still download it from Completed.
+    const delivered = results.some((r) => r.status === 'fulfilled' && r.value && !r.value.skipped);
+    if (delivered) await purgeEnvelopeStorage(env.id).catch(() => {});
+    else console.error(`[docsign] completion email undelivered for ${env.id} — retaining the signed PDF.`);
     return res.json({ data: { status: finalized?.env?.Status || 'completed' } });
   }
 

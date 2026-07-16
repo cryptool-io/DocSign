@@ -112,21 +112,6 @@ async function purgeEnvelopeStorage(envelopeId) {
   return { completed, source };
 }
 
-/** Sweep any terminal envelope still holding PDF bytes (stragglers). */
-async function purgeTerminalEnvelopeFiles() {
-  const rows = await DocEnvelope.findAll({
-    where: { Status: { [Op.in]: TERMINAL }, CompletedFileKey: { [Op.ne]: null } },
-    attributes: ['id'],
-    limit: 500
-  });
-  let n = 0;
-  for (const row of rows) {
-    const { completed } = await purgeEnvelopeStorage(row.id);
-    if (completed) n += 1;
-  }
-  return n;
-}
-
 /**
  * Sweep sovereign documents that still have transient bytes attached but no active
  * envelope needing them (e.g. after a decline/void, or an attach that never sent).
@@ -156,8 +141,11 @@ async function runRetention() {
   try {
     const purged = await purgeAbandonedDrafts();
     if (purged) console.log(`[retention] purged ${purged} abandoned draft envelope(s) older than ${DRAFT_DAYS}d`);
-    const files = await purgeTerminalEnvelopeFiles();
-    if (files) console.log(`[retention] purged stored PDFs for ${files} completed envelope(s)`);
+    // NB: we deliberately do NOT blanket-purge completed envelopes' PDFs here. The
+    // signed PDF is purged inline once it has actually been delivered to the parties
+    // (see publicSignController). Sweeping them unconditionally would delete copies
+    // that never got delivered — e.g. when a workspace mailbox is down and we refuse
+    // to send cross-brand.
     const sov = await purgeSovereignLeftovers();
     if (sov) console.log(`[retention] purged transient bytes for ${sov} sovereign document(s)`);
   } catch (err) {

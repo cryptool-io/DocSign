@@ -132,8 +132,9 @@ export default function Settings() {
         {isAdmin ? (
           <>
             <p className="muted mb">
-              Pulls the latest <code>main</code> from GitHub, reinstalls, rebuilds the app, runs a syntax
-              precheck, and restarts via PM2. Safe to run — a failed fetch or bad build aborts before restart.
+              Pulls the latest <code>{version?.branch || 'main'}</code> from GitHub, reinstalls, rebuilds the app,
+              runs a syntax precheck, and restarts via PM2. Safe to run — a failed fetch or bad build aborts before
+              restart. The app goes away for a few seconds while it restarts.
             </p>
             <button className="btn primary" disabled={updating} onClick={runUpdate}>
               {updating ? 'Updating…' : 'Update from GitHub & restart'}

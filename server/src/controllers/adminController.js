@@ -43,10 +43,18 @@ exports.selfUpdate = asyncHandler(async (req, res) => {
     return res.status(500).json({ ok: false, steps, error: 'syntax check failed — restart aborted' });
   }
 
-  // Restart is best-effort; if PM2 isn't managing us, this simply no-ops with an error step.
-  await record('pm2 restart', 'pm2 restart docsign-server');
-
+  // Answer BEFORE restarting. PM2 kills this process to restart it, so awaiting the
+  // restart means the connection dies mid-request and the browser shows a 502 on a
+  // deploy that actually succeeded. Reply first, restart a beat later.
+  steps.push({ label: 'pm2 restart', ok: true, output: 'restarting — this page will reconnect in a few seconds' });
   res.json({ ok: true, steps });
+
+  setTimeout(() => {
+    // Best-effort; if PM2 isn't managing us this just logs.
+    sh('pm2 restart docsign-server').catch((err) =>
+      console.error('[docsign] pm2 restart failed:', err.stderr || err.message)
+    );
+  }, 500);
 });
 
 /**
@@ -131,5 +139,12 @@ exports.version = asyncHandler(async (_req, res) => {
   } catch {
     /* not a git checkout */
   }
-  res.json({ data: { commit, node: process.version, uptimeSeconds: Math.round(process.uptime()) } });
+  res.json({
+    data: {
+      commit,
+      branch: process.env.DEPLOY_BRANCH || 'main',
+      node: process.version,
+      uptimeSeconds: Math.round(process.uptime())
+    }
+  });
 });

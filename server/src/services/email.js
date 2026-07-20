@@ -40,6 +40,32 @@ const getTransporter = () => {
   return transporter;
 };
 
+// Signer names/emails are user-supplied, so escape them before they go into
+// any HTML body.
+const esc = (v) =>
+  String(v == null ? '' : v)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+
+// "16 Jul 2026, 12:55 UTC". Always UTC so every party — wherever they open the
+// mail — reads the same timestamp as the certificate of completion.
+const fmtSignedAt = (d) => {
+  const t = d ? new Date(d) : null;
+  if (!t || Number.isNaN(t.getTime())) return '—';
+  const s = t.toLocaleString('en-GB', {
+    timeZone: 'UTC',
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    hour12: false
+  });
+  return `${s} UTC`;
+};
+
 // `brand` = { name, logoUrl } of the sending workspace. The header shows the
 // workspace's logo if it has one, else its name; falls back to the global brand.
 const layout = (heading, bodyHtml, cta, brand = {}) => {
@@ -209,24 +235,55 @@ const signerOtp = ({ to, code, fromName, fromEmail, replyTo, logoUrl }) =>
     html: signerOtpHtml(code, fromName || logoUrl ? { name: fromName, logoUrl, contactEmail: replyTo } : undefined)
   });
 
-const envelopeCompletedHtml = (hasAttachment, downloadUrl, brand) =>
+// Who signed, and when — in signing order. Mirrors the certificate of completion
+// so the mail body alone identifies the parties without opening the PDF.
+// `signers` = [{ name, email, signedAt }].
+const signerListHtml = (signers = []) => {
+  const list = (signers || []).filter((s) => s && (s.name || s.email));
+  if (!list.length) return '';
+  const rows = list
+    .map(
+      (s) => `
+      <tr>
+        <td style="padding:10px 16px 10px 0;border-top:1px solid #eee;vertical-align:top">
+          <strong>${esc(s.name || s.email)}</strong>${
+            s.name && s.email ? `<br><span style="color:#666;font-size:13px">${esc(s.email)}</span>` : ''
+          }
+        </td>
+        <td style="padding:10px 0;border-top:1px solid #eee;vertical-align:top;color:#444;white-space:nowrap">${fmtSignedAt(
+          s.signedAt
+        )}</td>
+      </tr>`
+    )
+    .join('');
+  return `
+    <p style="margin:24px 0 0;font-weight:600">Signed by</p>
+    <table style="border-collapse:collapse;width:100%;font-size:14px;margin-top:4px">${rows}</table>`;
+};
+
+const envelopeCompletedHtml = (hasAttachment, downloadUrl, brand, signers = []) =>
   layout(
     'All parties have signed',
     `<p>The document is fully executed${hasAttachment ? ', with the certificate of completion' : ''}. ${
       hasAttachment ? 'The signed PDF is attached to this email.' : 'A copy with the certificate of completion is available below.'
-    }</p>`,
+    }</p>${signerListHtml(signers)}`,
     downloadUrl ? { label: 'Download signed copy', url: downloadUrl } : null,
     brand
   );
 
-const envelopeCompleted = ({ to, subject, downloadUrl, attachments, fromName, fromEmail, replyTo, logoUrl }) =>
+const envelopeCompleted = ({ to, subject, downloadUrl, attachments, signers, fromName, fromEmail, replyTo, logoUrl }) =>
   sendEmail({
     to,
     fromName,
     fromEmail,
     replyTo,
     subject: subject || 'Document completed',
-    html: envelopeCompletedHtml(Boolean(attachments && attachments.length), downloadUrl, fromName || logoUrl ? { name: fromName, logoUrl, contactEmail: replyTo } : undefined),
+    html: envelopeCompletedHtml(
+      Boolean(attachments && attachments.length),
+      downloadUrl,
+      fromName || logoUrl ? { name: fromName, logoUrl, contactEmail: replyTo } : undefined,
+      signers
+    ),
     attachments
   });
 

@@ -190,6 +190,7 @@ export default function Inbox() {
             <thead>
               <tr>
                 <th>Document</th>
+                <th>Signed by</th>
                 <th>Completed</th>
                 <th />
               </tr>
@@ -205,6 +206,17 @@ export default function Inbox() {
                         {e.role === 'sender' ? 'you sent' : 'you signed'}
                       </span>
                     </div>
+                  </td>
+                  {/* Several envelopes off the same template share a name and subject —
+                      the parties are what tell them apart. */}
+                  <td className="muted">
+                    {e.signers && e.signers.length
+                      ? e.signers.map((s, i) => (
+                          <div key={s.email || s.name || i} title={s.email || undefined}>
+                            {s.name || s.email}
+                          </div>
+                        ))
+                      : '—'}
                   </td>
                   <td className="muted">{e.completedAt ? fmtDate(e.completedAt) : '—'}</td>
                   <td style={{ textAlign: 'right' }}>

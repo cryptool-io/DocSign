@@ -536,7 +536,13 @@ exports.submit = asyncHandler(async (req, res) => {
       finalized?.pdfBuffer && !finalized.encrypted
         ? [{ filename: finalized.fileName || 'signed.pdf', content: finalized.pdfBuffer, contentType: 'application/pdf' }]
         : undefined;
-    const html = envelopeCompletedHtml(Boolean(attachments), null, brandOf(sender.identity));
+    // Who signed and when, in signing order — so the mail says who executed the
+    // document without anyone having to open the certificate of completion.
+    const signedBy = allSigners
+      .filter((s) => s.Status === 'signed')
+      .sort((a, b) => (a.SigningOrder || 0) - (b.SigningOrder || 0) || new Date(a.SignedAt || 0) - new Date(b.SignedAt || 0))
+      .map((s) => ({ name: s.Name, email: s.Email, signedAt: s.SignedAt }));
+    const html = envelopeCompletedHtml(Boolean(attachments), null, brandOf(sender.identity), signedBy);
     const results = await Promise.allSettled(
       recipients.map((to) => sendWithSender(sender, { to, subject: `Completed: ${env.Subject}`, html, attachments }))
     );

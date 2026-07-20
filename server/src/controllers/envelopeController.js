@@ -563,7 +563,8 @@ exports.completed = asyncHandler(async (req, res) => {
       completedAt: env.CompletedAt,
       hasCompletedFile: Boolean(env.CompletedFileKey),
       completedSha256: env.CompletedSha256 || null,
-      role
+      role,
+      signers: []
     });
   };
 
@@ -575,6 +576,19 @@ exports.completed = asyncHandler(async (req, res) => {
     include: [{ model: DocEnvelope, as: 'Envelope', where: { Status: 'completed' }, required: true }]
   });
   for (const s of rows) add(s.Envelope, await DocDocument.findByPk(s.Envelope.DocDocumentId), 'signer');
+
+  // Attach who signed each one. Several envelopes off the same template look
+  // identical by name + subject alone, so the parties are what tell them apart.
+  const ids = [...seen.keys()];
+  if (ids.length) {
+    const signers = await DocEnvelopeSigner.findAll({ where: { DocEnvelopeId: ids, Status: 'signed' } });
+    for (const s of signers) {
+      seen.get(s.DocEnvelopeId)?.signers.push({ name: s.Name, email: s.Email, signedAt: s.SignedAt });
+    }
+    for (const row of seen.values()) {
+      row.signers.sort((a, b) => new Date(a.signedAt || 0) - new Date(b.signedAt || 0));
+    }
+  }
 
   const data = [...seen.values()].sort((a, b) => new Date(b.completedAt || 0) - new Date(a.completedAt || 0));
   res.json({ data });

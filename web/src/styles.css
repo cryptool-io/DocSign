@@ -199,8 +199,13 @@ a.stat:hover { border-color: var(--faint); box-shadow: var(--shadow-md); transfo
   position: absolute; border: 2px solid var(--primary); background: rgba(37, 99, 235, .12);
   border-radius: 4px; font-size: 11px; color: var(--primary-dark); cursor: move;
   display: flex; align-items: center; justify-content: center; user-select: none;
+  /* Dragging a field must move the field, not scroll the page. */
+  touch-action: none;
 }
-.field-box .del { position: absolute; top: -9px; right: -9px; background: var(--danger); color: #fff; border-radius: 50%; width: 18px; height: 18px; font-size: 12px; display: grid; place-items: center; cursor: pointer; box-shadow: var(--shadow-sm); }
+.field-box .del { position: absolute; top: -10px; right: -10px; background: var(--danger); color: #fff; border-radius: 50%; width: 20px; height: 20px; font-size: 13px; display: grid; place-items: center; cursor: pointer; box-shadow: var(--shadow-sm); }
+@media (pointer: coarse) {
+  .field-box .del { width: 26px; height: 26px; top: -13px; right: -13px; font-size: 16px; }
+}
 .sign-field { position: absolute; border: 2px dashed var(--warn); background: rgba(217,119,6,.08); border-radius: 4px; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 12px; color: var(--warn); text-align: center; transition: background .12s ease, border-color .12s ease, box-shadow .12s ease; }
 .sign-field:hover { background: rgba(217,119,6,.14); box-shadow: 0 0 0 3px rgba(217,119,6,.16); }
 .sign-field.optional { border: 2px dashed #64748b; background: rgba(100,116,139,.06); color: #475569; }
@@ -212,6 +217,36 @@ a.stat:hover { border-color: var(--faint); box-shadow: var(--shadow-md); transfo
 .sign-field.readonly:hover { background: rgba(100,116,139,.08); box-shadow: none; }
 /* Your empty required fields after a failed submit — red. */
 .sign-field.missing { border: 2px solid var(--danger); background: rgba(220,38,38,.1); color: var(--danger); }
+
+/* Signer rows on Send-for-signature. Laid out as columns under one set of
+   headings, so only the first row shows its labels. */
+.signer-row:not(.first) label { display: none; }
+
+/* Public data room: document list beside the viewer. */
+.dr-shell { display: flex; min-height: 100vh; }
+.dr-sidebar { width: 280px; }
+
+/* Field editor: document on the left, settings panel pinned on the right.
+   Stacks into a single column on phones (see the media query). */
+.editor-split { display: flex; gap: 16px; align-items: flex-start; }
+.editor-stage { flex: 1; min-width: 0; text-align: center; }
+.editor-panel { width: 290px; flex-shrink: 0; position: sticky; top: 12px; align-self: flex-start; }
+
+/* Handles on a placed field. Sized for a fingertip on touch screens. */
+.fp-del {
+  position: absolute; top: -10px; right: -10px; width: 20px; height: 20px;
+  border-radius: 50%; color: #fff; display: grid; place-items: center;
+  cursor: pointer; font-size: 13px; line-height: 1;
+}
+.fp-resize {
+  position: absolute; bottom: -6px; right: -6px; width: 14px; height: 14px;
+  background: #fff; border: 2px solid currentColor; border-radius: 2px;
+  cursor: nwse-resize; touch-action: none;
+}
+@media (pointer: coarse) {
+  .fp-del { width: 26px; height: 26px; top: -13px; right: -13px; font-size: 16px; }
+  .fp-resize { width: 20px; height: 20px; bottom: -10px; right: -10px; }
+}
 
 .center-narrow { max-width: 420px; width: 100%; }
 .divider { height: 1px; background: var(--border); margin: 16px 0; border: none; }
@@ -231,30 +266,119 @@ a.stat:hover { border-color: var(--faint); box-shadow: var(--shadow-md); transfo
 .public-center[style*="fixed"] { animation: overlay-in .14s ease; }
 @keyframes overlay-in { from { opacity: 0; } to { opacity: 1; } }
 
+/* Nav toggle — only ever visible on phones (see the media query below). */
+.nav-toggle { display: none; }
+.scrim { display: none; }
+
 /* ---- Mobile / phone ------------------------------------------------------ */
 @media (max-width: 640px) {
+  /* The page itself must never scroll sideways. Wide content scrolls in its
+     own box instead, so a stray long string can't shift the whole layout.
+     `clip` rather than `hidden`: hidden would make body a scroll container and
+     break the sticky signing header on PublicSign. */
+  html, body { overflow-x: clip; }
+
+  /* Reclaim the ~40px of gutter the desktop padding costs us. */
+  .content { padding: 16px 12px; }
   .public-wrap { padding: 16px 10px; }
+  .public-center { padding: 12px; }
 
-  /* Never let a page scroll sideways; wide content scrolls inside its own box. */
-  .pdf-page-wrap, .pdf-stage { max-width: 100%; }
-  .table-scroll, .card { overflow-x: auto; }
+  /* --- Headers and generic flex rows stack instead of overflowing. --- */
+  .page-head { flex-direction: column; align-items: stretch; gap: 12px; margin-bottom: 16px; }
+  .page-head > * { min-width: 0; }
+  .flex { flex-wrap: wrap; }
+  .flex > * { min-width: 0; }
+  .card.flex.between { gap: 10px; }
 
-  /* Header rows (incl. the sticky signing bar) stack instead of overflowing. */
-  .card.flex.between { flex-wrap: wrap; gap: 10px; }
-  .card.flex.between > * { min-width: 0; }
+  /* Action groups go full width and share the row evenly — but NOT inside a
+     table cell, where stretched buttons look broken. */
   .wrap-actions { width: 100%; }
   .wrap-actions .btn { flex: 1 1 auto; }
+  td .wrap-actions { width: auto; }
+  td .wrap-actions .btn { flex: 0 0 auto; }
 
-  /* Signing legend + adopt controls wrap. */
+  /* --- Form rows: one field per line. --- */
+  .row { flex-wrap: wrap; gap: 0; }
+  .row > * { flex: 1 1 100%; min-width: 0; }
+  /* Fixed inline widths on controls are desktop sizing; ignore them here. */
+  .row .input, .row .select, .input, .select { max-width: none !important; }
+
+  /* 16px is the threshold below which iOS Safari zooms in on focus. */
+  .input, .select, textarea.input { font-size: 16px; }
+
+  /* Each signer becomes its own labelled card rather than an 8-across row. */
+  .signer-row {
+    flex-direction: column; align-items: stretch !important;
+    gap: 10px; padding: 12px; margin-bottom: 12px !important;
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+  }
+  .signer-row > * { flex: 0 0 auto !important; width: 100%; }
+  /* Stacked rows no longer sit under shared headings, so every row needs its
+     own labels back. Matches the desktop hide rule's specificity. */
+  .signer-row:not(.first) label { display: block; }
+  .signer-row .btn { width: 100% !important; height: auto !important; }
+
+  /* --- Tables: scroll inside their card rather than crushing to nothing. ---
+     min-width stops the browser squeezing columns to min-content; the tighter
+     padding means fewer columns need the scroll at all. */
+  .card:has(table), .table-scroll { overflow-x: auto; }
+  .card table, .table-scroll table { min-width: 520px; }
+  th, td { padding: 10px 10px; }
+  th { font-size: 11px; }
+
+  /* Long emails, URLs, IDs and log lines wrap instead of pushing the page. */
+  td, .muted, code, .stat .l { overflow-wrap: anywhere; }
+
+  /* Two tiles per row still fit once the content padding is trimmed. */
+  .stats { grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 16px; }
+  .stat { padding: 12px 14px; }
+  .stat .n { font-size: 22px; }
+
+  /* Comfortable tap targets. */
+  .btn { min-height: 40px; }
+  .btn.sm { min-height: 34px; }
+
+  /* --- Signing / PDF --- */
+  .pdf-page-wrap, .pdf-stage { max-width: 100%; }
+  /* Settings panel drops below the document instead of stealing 290px.
+     align-items must become stretch: with flex-start the stage shrink-wraps to
+     zero width in column direction and the PDF would render at minimum size. */
+  .editor-split { flex-direction: column; align-items: stretch; }
+  .editor-stage, .editor-panel { width: 100%; position: static; }
   .sign-field { font-size: 10px; }
-
-  /* Floating "next field" button: smaller and tucked into the corner. */
   .next-fab { bottom: 12px !important; right: 12px !important; font-size: 13px; padding: 8px 12px !important; }
 
-  /* App shell: collapse the sidebar into a top strip so content gets full width. */
+  /* --- App shell: the sidebar becomes an off-canvas drawer. --- */
   .app-shell { flex-direction: column; }
-  .sidebar { width: auto; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 8px; padding: 10px 12px; }
-  .sidebar .nav { flex-direction: row; flex-wrap: wrap; gap: 6px; }
-  .sidebar .brand { width: 100%; }
-  .topbar { flex-wrap: wrap; gap: 8px; height: auto; padding: 10px 12px; }
+  .nav-toggle {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 38px; height: 38px; flex: 0 0 auto; padding: 0;
+  }
+  .sidebar {
+    position: fixed; top: 0; left: 0; bottom: 0; z-index: 60;
+    width: 260px; height: 100%; padding: 16px 12px;
+    transform: translateX(-100%); transition: transform .18s ease;
+    box-shadow: var(--shadow-lg); overflow-y: auto;
+  }
+  .sidebar.open { transform: none; }
+  .scrim { display: block; position: fixed; inset: 0; z-index: 50; background: rgba(16, 24, 40, .45); }
+
+  /* Topbar wraps to two rows: [menu][workspace] then the action buttons. */
+  .topbar { flex-wrap: wrap; gap: 8px; padding: 10px 12px; }
+  .topbar > .flex { flex: 1 1 100%; flex-wrap: nowrap; }
+  .topbar .select { width: auto !important; flex: 1 1 auto; min-width: 0; }
+  .topbar > .flex:last-child .btn { flex: 1 1 auto; }
+  .hide-phone { display: none; }
+
+  /* Data room: the document list becomes a scrollable strip above the viewer.
+     It is not the app drawer, so it stays in flow and visible. */
+  .dr-shell { flex-direction: column; min-height: 0; }
+  .dr-sidebar {
+    position: static; transform: none; box-shadow: none;
+    width: auto; height: auto; max-height: 40vh; padding: 10px 12px;
+    border-right: none; border-bottom: 1px solid var(--border);
+  }
+  .dr-sidebar .nav { flex-direction: row; flex-wrap: wrap; gap: 6px; }
+  .dr-sidebar .nav a { margin-bottom: 0; }
+  .dr-sidebar .nav a > span { white-space: normal !important; }
 }

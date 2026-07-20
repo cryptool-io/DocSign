@@ -5,6 +5,7 @@ import { Document, Page } from '../../lib/pdf.js';
 import { decryptToBlob } from '../../lib/keystore.js';
 import { keyFromHash } from '../../lib/linkkey.js';
 import { Spinner } from '../../lib/ui.jsx';
+import { useStageWidth } from '../../components/FieldPlacer.jsx';
 
 // Standalone axios (no app auth interceptors) for the public surface.
 const pub = axios.create({ baseURL: '/api' });
@@ -18,6 +19,8 @@ export default function PublicView() {
   const [session, setSession] = useState(null); // { viewerToken, sessionId, linkId, allowDownload }
   const [pdfUrl, setPdfUrl] = useState(null);
   const [numPages, setNumPages] = useState(0);
+  // Render pages at the width actually available, so they fit any screen.
+  const [stageRef, pageWidth] = useStageWidth(760);
 
   // Per-page dwell tracking.
   const pageSeconds = useRef({});
@@ -173,11 +176,11 @@ export default function PublicView() {
       {!pdfUrl ? (
         <Spinner center />
       ) : (
-        <div style={{ textAlign: 'center' }}>
+        <div style={{ textAlign: 'center' }} ref={stageRef}>
           <Document file={pdfUrl} onLoadSuccess={({ numPages: n }) => setNumPages(n)} loading={<Spinner center />}>
             {Array.from({ length: numPages }, (_, i) => (
               <div key={i} data-page={i + 1} ref={(el) => (pageRefs.current[i] = el)} className="pdf-stage">
-                <Page pageNumber={i + 1} width={760} renderTextLayer={false} renderAnnotationLayer={false} />
+                <Page pageNumber={i + 1} width={pageWidth} renderTextLayer={false} renderAnnotationLayer={false} />
               </div>
             ))}
           </Document>

@@ -5,6 +5,7 @@ import { Document, Page } from '../../lib/pdf.js';
 import { decryptToBlob } from '../../lib/keystore.js';
 import { keyMapFromHash } from '../../lib/linkkey.js';
 import { Spinner } from '../../lib/ui.jsx';
+import { useStageWidth } from '../../components/FieldPlacer.jsx';
 
 const pub = axios.create({ baseURL: '/api' });
 
@@ -18,6 +19,8 @@ export default function PublicDataRoom() {
   const [activeDoc, setActiveDoc] = useState(null);
   const [pdfUrl, setPdfUrl] = useState(null);
   const [numPages, setNumPages] = useState(0);
+  // Render pages at the width actually available, so they fit any screen.
+  const [stageRef, pageWidth] = useStageWidth(720);
 
   const pageSeconds = useRef({});
   const visiblePage = useRef(1);
@@ -162,8 +165,8 @@ export default function PublicDataRoom() {
   }
 
   return (
-    <div style={{ display: 'flex', minHeight: '100vh' }}>
-      <aside className="sidebar" style={{ width: 280 }}>
+    <div className="dr-shell">
+      <aside className="sidebar dr-sidebar">
         <div className="brand">{session.name}</div>
         <div className="muted" style={{ padding: '0 8px 12px', fontSize: 12 }}>
           {session.documents.length} document{session.documents.length > 1 ? 's' : ''}
@@ -198,11 +201,11 @@ export default function PublicDataRoom() {
                   {activeDoc.pageCount} page{activeDoc.pageCount > 1 ? 's' : ''}
                 </span>
               </div>
-              <div style={{ textAlign: 'center' }}>
+              <div style={{ textAlign: 'center' }} ref={stageRef}>
                 <Document file={pdfUrl} onLoadSuccess={({ numPages: n }) => setNumPages(n)} loading={<Spinner center />}>
                   {Array.from({ length: numPages }, (_, i) => (
                     <div key={i} data-page={i + 1} ref={(el) => (pageRefs.current[i] = el)} className="pdf-stage">
-                      <Page pageNumber={i + 1} width={720} renderTextLayer={false} renderAnnotationLayer={false} />
+                      <Page pageNumber={i + 1} width={pageWidth} renderTextLayer={false} renderAnnotationLayer={false} />
                     </div>
                   ))}
                 </Document>

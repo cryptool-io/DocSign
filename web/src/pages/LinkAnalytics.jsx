@@ -43,12 +43,14 @@ export default function LinkAnalytics() {
         {pageCount === 0 ? (
           <p className="muted">No page data.</p>
         ) : (
-          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, height: 160, paddingTop: 10 }}>
+          // A long document has more bars than fit a phone, so the chart
+          // scrolls sideways inside its card rather than stretching the page.
+          <div className="page-time-chart" style={{ display: 'flex', alignItems: 'flex-end', gap: 6, height: 160, paddingTop: 10, overflowX: 'auto' }}>
             {Array.from({ length: pageCount }, (_, i) => {
               const secs = perPageSeconds?.[i + 1] || 0;
               const h = Math.round((secs / maxSecs) * 130);
               return (
-                <div key={i} style={{ flex: 1, textAlign: 'center' }}>
+                <div key={i} style={{ flex: '1 0 34px', minWidth: 34, textAlign: 'center' }}>
                   <div style={{ fontSize: 11, color: 'var(--muted)' }}>{fmtDuration(secs)}</div>
                   <div
                     title={`Page ${i + 1}: ${fmtDuration(secs)}`}

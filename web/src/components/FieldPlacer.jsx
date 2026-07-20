@@ -29,12 +29,34 @@ const heightForFont = (fs) => Math.min(0.15, Math.max(0.014, (fs * 1.55) / 792))
 // Distinct colors per signer so it's obvious who signs where.
 export const SIGNER_COLORS = ['#2563eb', '#d97706', '#16a34a', '#9333ea', '#dc2626', '#0891b2'];
 
-const PAGE_WIDTH = 680;
+// Widest we'll ever render a page. On narrower screens the page is rendered at
+// whatever the stage column actually measures — see useStageWidth.
+export const MAX_PAGE_WIDTH = 680;
 
-function PageOverlay({ pageNumber, fields, onAdd, onMove, onResize, onRemove, onSelect, selectedId, activeType, colorFor }) {
+/**
+ * Width to render PDF pages at: the container's own width, capped. Re-measures
+ * on resize/rotate, so the same code covers desktop, tablet and phone.
+ */
+export function useStageWidth(max = MAX_PAGE_WIDTH) {
+  const ref = useRef(null);
+  const [width, setWidth] = useState(max);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const measure = () => setWidth(Math.max(240, Math.min(el.clientWidth, max)));
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [max]);
+  return [ref, width];
+}
+
+function PageOverlay({ pageNumber, pageWidth, fields, onAdd, onMove, onResize, onRemove, onSelect, selectedId, activeType, colorFor }) {
   const ref = useRef();
 
   // Drag the bottom-right handle to resize (e.g. widen a box for long text).
+  // Pointer events so this works with a mouse, a pen and a finger alike.
   const startResize = (e, field) => {
     e.stopPropagation();
     onSelect(field._id);
@@ -48,11 +70,13 @@ function PageOverlay({ pageNumber, fields, onAdd, onMove, onResize, onRemove, on
       });
     };
     const up = () => {
-      window.removeEventListener('mousemove', move);
-      window.removeEventListener('mouseup', up);
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', up);
     };
-    window.addEventListener('mousemove', move);
-    window.addEventListener('mouseup', up);
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', up);
   };
 
   const dropHere = (e) => {
@@ -83,16 +107,18 @@ function PageOverlay({ pageNumber, fields, onAdd, onMove, onResize, onRemove, on
       onMove(field._id, { x: Math.max(0, Math.min(x, 1 - field.width)), y: Math.max(0, Math.min(y, 1 - field.height)) });
     };
     const up = () => {
-      window.removeEventListener('mousemove', move);
-      window.removeEventListener('mouseup', up);
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', up);
     };
-    window.addEventListener('mousemove', move);
-    window.addEventListener('mouseup', up);
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', up);
   };
 
   return (
     <div className="pdf-page-wrap pdf-stage" ref={ref} onClick={dropHere} style={{ cursor: activeType ? 'crosshair' : 'default' }}>
-      <Page pageNumber={pageNumber} width={PAGE_WIDTH} renderTextLayer={false} renderAnnotationLayer={false} />
+      <Page pageNumber={pageNumber} width={pageWidth} renderTextLayer={false} renderAnnotationLayer={false} />
       {fields
         .filter((f) => f.pageNumber === pageNumber)
         .map((f) => {
@@ -100,9 +126,11 @@ function PageOverlay({ pageNumber, fields, onAdd, onMove, onResize, onRemove, on
           return (
             <div
               key={f._id}
-              onMouseDown={(e) => startDrag(e, f)}
+              onPointerDown={(e) => startDrag(e, f)}
               onClick={(e) => { e.stopPropagation(); onSelect(f._id); }}
               style={{
+                // Stop a finger-drag on the field from scrolling the page.
+                touchAction: 'none',
                 position: 'absolute',
                 left: `${f.x * 100}%`,
                 top: `${f.y * 100}%`,
@@ -127,16 +155,19 @@ function PageOverlay({ pageNumber, fields, onAdd, onMove, onResize, onRemove, on
             >
               {(f.label || f.type)}{f.required === false ? '' : ' *'}
               <span
+                className="fp-del"
+                onPointerDown={(e) => e.stopPropagation()}
                 onClick={(e) => { e.stopPropagation(); onRemove(f._id); }}
-                style={{ position: 'absolute', top: -9, right: -9, width: 18, height: 18, borderRadius: '50%', background: '#dc2626', color: '#fff', display: 'grid', placeItems: 'center', cursor: 'pointer', fontSize: 12 }}
+                style={{ background: '#dc2626' }}
               >
                 ×
               </span>
               <span
-                onMouseDown={(e) => startResize(e, f)}
+                className="fp-resize"
+                onPointerDown={(e) => startResize(e, f)}
                 onClick={(e) => e.stopPropagation()}
                 title="Drag to resize"
-                style={{ position: 'absolute', bottom: -5, right: -5, width: 12, height: 12, background: '#fff', border: `2px solid ${color}`, borderRadius: 2, cursor: 'nwse-resize' }}
+                style={{ borderColor: color }}
               />
             </div>
           );
@@ -155,6 +186,7 @@ export default function FieldPlacer({ documentId, doc, fields, setFields, active
   const [numPages, setNumPages] = useState(0);
   const [err, setErr] = useState(null);
   const [selectedId, setSelectedId] = useState(null);
+  const [stageRef, pageWidth] = useStageWidth();
 
   useEffect(() => {
     if (!documentId) {
@@ -181,8 +213,8 @@ export default function FieldPlacer({ documentId, doc, fields, setFields, active
       if (!d) return;
       e.preventDefault();
       const mult = e.shiftKey ? 10 : 1;
-      const stepX = mult / PAGE_WIDTH;
-      const stepY = mult / (PAGE_WIDTH * 1.294); // ~letter aspect
+      const stepX = mult / pageWidth;
+      const stepY = mult / (pageWidth * 1.294); // ~letter aspect
       setFields((cur) =>
         cur.map((f) =>
           f._id === selectedId
@@ -197,7 +229,7 @@ export default function FieldPlacer({ documentId, doc, fields, setFields, active
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [selectedId, setFields]);
+  }, [selectedId, setFields, pageWidth]);
 
   const addField = (partial) => {
     const _id = Math.random().toString(36).slice(2);
@@ -233,13 +265,14 @@ export default function FieldPlacer({ documentId, doc, fields, setFields, active
   const selected = fields.find((f) => f._id === selectedId) || null;
 
   return (
-    <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
-      <div style={{ flex: 1, minWidth: 0, textAlign: 'center' }}>
+    <div className="editor-split">
+      <div className="editor-stage" ref={stageRef}>
         <Document file={pdfUrl} onLoadSuccess={({ numPages: n }) => setNumPages(n)} loading={<Spinner center />}>
           {Array.from({ length: numPages }, (_, i) => (
             <PageOverlay
               key={i}
               pageNumber={i + 1}
+              pageWidth={pageWidth}
               fields={fields}
               onAdd={addField}
               onMove={moveField}
@@ -256,7 +289,7 @@ export default function FieldPlacer({ documentId, doc, fields, setFields, active
 
       {/* Field settings — pinned to the right so they stay in view while you
           scroll the document. Shows the selected field's options, or a hint. */}
-      <div style={{ width: 290, flexShrink: 0, position: 'sticky', top: 12, alignSelf: 'flex-start' }}>
+      <div className="editor-panel">
         <div className="card" style={{ background: 'var(--panel, #fafafa)', textAlign: 'left' }}>
           {selected ? (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>

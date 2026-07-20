@@ -23,7 +23,14 @@ export default function Shell() {
   const nav = useNavigate();
   const loc = useLocation();
   const [pending, setPending] = useState(0);
+  // Phone only: the sidebar is an off-canvas drawer. On desktop the CSS keeps
+  // it docked and this flag is inert.
+  const [navOpen, setNavOpen] = useState(false);
   const navLinks = user?.role === 'admin' ? [...links, adminLink] : links;
+
+  // Navigating away should always close the drawer, otherwise it stays over
+  // the page you just moved to.
+  useEffect(() => { setNavOpen(false); }, [loc.pathname]);
 
   useEffect(() => {
     load().catch(() => {});
@@ -44,7 +51,8 @@ export default function Shell() {
 
   return (
     <div className="app-shell">
-      <aside className="sidebar">
+      {navOpen && <div className="scrim" onClick={() => setNavOpen(false)} />}
+      <aside className={navOpen ? 'sidebar open' : 'sidebar'}>
         <div className="brand">
           <span>DocSign</span>
         </div>
@@ -83,9 +91,18 @@ export default function Shell() {
       <div className="main">
         <div className="topbar">
           <div className="flex">
-            <span className="muted" style={{ fontSize: 13 }}>Workspace:</span>
+            <button
+              className="btn sm nav-toggle"
+              aria-label="Menu"
+              aria-expanded={navOpen}
+              onClick={() => setNavOpen((v) => !v)}
+            >
+              ☰
+            </button>
+            <span className="muted hide-phone" style={{ fontSize: 13 }}>Workspace:</span>
             <select
               className="select"
+              aria-label="Workspace"
               style={{ width: 200 }}
               value={activeId || ''}
               onChange={(e) => setActive(e.target.value || null)}

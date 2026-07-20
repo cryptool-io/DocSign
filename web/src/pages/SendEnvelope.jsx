@@ -673,9 +673,9 @@ export default function SendEnvelope() {
         </div>
         <div className="mt">
           {signers.map((s, i) => (
-            <div key={i} className="row" style={{ alignItems: 'flex-end', marginBottom: 10 }}>
+            <div key={i} className={`row signer-row${i === 0 ? ' first' : ''}`} style={{ alignItems: 'flex-end', marginBottom: 10 }}>
               <div className="field" style={{ marginBottom: 0, flex: 1.4 }}>
-                {i === 0 && <label>From saved recipient</label>}
+                <label>From saved recipient</label>
                 <select className="select" value={s.recipientId || ''} onChange={(e) => pickRecipient(i, e.target.value)}>
                   <option value="">Manual…</option>
                   {recipients.map((r) => (
@@ -686,19 +686,19 @@ export default function SendEnvelope() {
                 </select>
               </div>
               <div className="field" style={{ marginBottom: 0 }}>
-                {i === 0 && <label>Name</label>}
+                <label>Name</label>
                 <input className="input" value={s.name} onChange={(e) => setSigner(i, 'name', e.target.value)} placeholder="Full name" />
               </div>
               <div className="field" style={{ marginBottom: 0 }}>
-                {i === 0 && <label>Email</label>}
+                <label>Email</label>
                 <input className="input" type="email" value={s.email} onChange={(e) => setSigner(i, 'email', e.target.value)} placeholder="email@company.com" />
               </div>
               <div className="field" style={{ marginBottom: 0, flex: 0.7 }}>
-                {i === 0 && <label>Role</label>}
+                <label>Role</label>
                 <input className="input" value={s.signerRole} onChange={(e) => setSigner(i, 'signerRole', e.target.value)} placeholder="e.g. investor" />
               </div>
               <div className="field" style={{ marginBottom: 0, flex: 0.45 }}>
-                {i === 0 && <label>Fields</label>}
+                <label>Fields</label>
                 <div style={{ minHeight: 38, display: 'flex', alignItems: 'center' }} title="How many fields this person signs">
                   {s.email ? (
                     <span className={`badge ${(fieldsByEmail[s.email] || 0) > 0 ? 'green' : 'amber'}`}>
@@ -711,7 +711,7 @@ export default function SendEnvelope() {
               </div>
               {order === 'sequential' && (
                 <div className="field" style={{ marginBottom: 0, flex: 0.4 }}>
-                  {i === 0 && <label>Order</label>}
+                  <label>Order</label>
                   <input className="input" type="number" min={1} value={s.signingOrder} onChange={(e) => setSigner(i, 'signingOrder', e.target.value)} />
                 </div>
               )}

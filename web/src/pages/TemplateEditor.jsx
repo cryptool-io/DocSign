@@ -5,6 +5,7 @@ import { withCompany } from '../lib/company.js';
 import { ownerFileUrl } from '../lib/keystore.js';
 import { Document, Page } from '../lib/pdf.js';
 import { Spinner, useToast } from '../lib/ui.jsx';
+import { useStageWidth } from '../components/FieldPlacer.jsx';
 
 const FIELD_TYPES = [
   { type: 'signature', label: 'Signature' },
@@ -39,11 +40,13 @@ function PageCanvas({ pageNumber, width, fields, activeType, colorFor, labelFor,
       });
     };
     const up = () => {
-      window.removeEventListener('mousemove', move);
-      window.removeEventListener('mouseup', up);
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', up);
     };
-    window.addEventListener('mousemove', move);
-    window.addEventListener('mouseup', up);
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', up);
   };
 
   const onClick = (e) => {
@@ -73,11 +76,13 @@ function PageCanvas({ pageNumber, width, fields, activeType, colorFor, labelFor,
       onMove(field._id, { x: Math.max(0, Math.min(x, 1 - field.width)), y: Math.max(0, Math.min(y, 1 - field.height)) });
     };
     const up = () => {
-      window.removeEventListener('mousemove', move);
-      window.removeEventListener('mouseup', up);
+      window.removeEventListener('pointermove', move);
+      window.removeEventListener('pointerup', up);
+      window.removeEventListener('pointercancel', up);
     };
-    window.addEventListener('mousemove', move);
-    window.addEventListener('mouseup', up);
+    window.addEventListener('pointermove', move);
+    window.addEventListener('pointerup', up);
+    window.addEventListener('pointercancel', up);
   };
 
   return (
@@ -91,7 +96,7 @@ function PageCanvas({ pageNumber, width, fields, activeType, colorFor, labelFor,
             <div
               key={f._id}
               className="field-box"
-              onMouseDown={(e) => startDrag(e, f)}
+              onPointerDown={(e) => startDrag(e, f)}
               onClick={(e) => { e.stopPropagation(); onSelect(f._id); }}
               style={{
                 left: `${f.x * 100}%`,
@@ -107,12 +112,13 @@ function PageCanvas({ pageNumber, width, fields, activeType, colorFor, labelFor,
               title={`${labelFor(f)} · ${f.type}`}
             >
               <span style={{ fontSize: 10, lineHeight: 1.1, overflow: 'hidden' }}>{f.label || f.type}</span>
-              <span className="del" onClick={(e) => { e.stopPropagation(); onRemove(f._id); }}>×</span>
+              <span className="del" onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); onRemove(f._id); }}>×</span>
               <span
-                onMouseDown={(e) => startResize(e, f)}
+                className="fp-resize"
+                onPointerDown={(e) => startResize(e, f)}
                 onClick={(e) => e.stopPropagation()}
                 title="Drag to resize"
-                style={{ position: 'absolute', bottom: -5, right: -5, width: 12, height: 12, background: '#fff', border: `2px solid ${color}`, borderRadius: 2, cursor: 'nwse-resize' }}
+                style={{ borderColor: color }}
               />
             </div>
           );
@@ -139,6 +145,8 @@ export default function TemplateEditor() {
   const [pdfData, setPdfData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  // Render pages at the stage's real width so they fit any screen.
+  const [stageRef, pageWidth] = useStageWidth(640);
 
   useEffect(() => {
     (async () => {
@@ -175,8 +183,8 @@ export default function TemplateEditor() {
       if (!d) return;
       e.preventDefault();
       const mult = e.shiftKey ? 10 : 1;
-      const stepX = mult / 640; // PageCanvas render width
-      const stepY = mult / (640 * 1.294);
+      const stepX = mult / pageWidth; // PageCanvas render width
+      const stepY = mult / (pageWidth * 1.294);
       setFields((cur) =>
         cur.map((f) =>
           f._id === selectedId
@@ -191,7 +199,7 @@ export default function TemplateEditor() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [selectedId]);
+  }, [selectedId, pageWidth]);
 
   useEffect(() => {
     if (!documentId) return setPdfData(null);
@@ -352,14 +360,14 @@ export default function TemplateEditor() {
       {!pdfData ? (
         <div className="empty">Choose a source document to place fields.</div>
       ) : (
-        <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start' }}>
-          <div style={{ flex: 1, minWidth: 0, textAlign: 'center' }}>
+        <div className="editor-split">
+          <div className="editor-stage" ref={stageRef}>
             <Document file={pdfData} onLoadSuccess={({ numPages: n }) => setNumPages(n)} loading={<Spinner center />}>
               {Array.from({ length: numPages }, (_, i) => (
                 <PageCanvas
                   key={i}
                   pageNumber={i + 1}
-                  width={640}
+                  width={pageWidth}
                   fields={fields}
                   activeType={activeType}
                   colorFor={colorFor}
@@ -377,7 +385,7 @@ export default function TemplateEditor() {
 
           {/* Add-field palette + field settings — pinned right so they stay in
               view while scrolling through the pages. */}
-          <div style={{ width: 290, flexShrink: 0, position: 'sticky', top: 12, alignSelf: 'flex-start', display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div className="editor-panel" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             <div className="card" style={{ background: 'var(--panel, #fafafa)', textAlign: 'left' }}>
               <div className="muted" style={{ fontSize: 13, marginBottom: 8 }}>
                 Add field for <strong style={{ color: colorFor(activeSigner) }}>{signerLabel(activeSigner)}</strong>

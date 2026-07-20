@@ -7,6 +7,13 @@
       "runtimeArgs": ["src/app.js"],
       "cwd": "server",
       "port": 4400
+    },
+    {
+      "name": "docsign-web",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "cwd": "web",
+      "port": 5173
     }
   ]
 }

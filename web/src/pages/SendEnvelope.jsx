@@ -32,6 +32,7 @@ export default function SendEnvelope() {
   const [fromEmail, setFromEmail] = useState('');
   const [deliveryMode, setDeliveryMode] = useState('email');
   const [requireVerification, setRequireVerification] = useState(false);
+  const [keepCompletedCopy, setKeepCompletedCopy] = useState(true);
   const [subject, setSubject] = useState('');
   const [message, setMessage] = useState('');
   const [order, setOrder] = useState('parallel');
@@ -398,6 +399,7 @@ export default function SendEnvelope() {
         fromEmail: fromEmail || null,
         deliveryMode,
         requireVerification: deliveryMode === 'link' ? requireVerification : true,
+        keepCompletedCopy,
         subject,
         message: message || null,
         signingOrder: order,
@@ -942,6 +944,15 @@ export default function SendEnvelope() {
             The signer gets an email with a secure link and a one-time code to verify their identity.
           </p>
         )}
+        <label className="checkbox" style={{ marginTop: 12 }}>
+          <input type="checkbox" checked={keepCompletedCopy} onChange={(e) => setKeepCompletedCopy(e.target.checked)} />
+          Keep the signed copy on the server so you can download it later
+        </label>
+        <p className="muted" style={{ fontSize: 13, marginTop: -4 }}>
+          {keepCompletedCopy
+            ? 'The fully-signed PDF stays in Completed, downloadable any time.'
+            : 'The fully-signed PDF is emailed to everyone and then deleted from the server — the email attachment becomes your only copy. Its fingerprint stays behind as proof.'}
+        </p>
       </div>
 
       {deliveryMode === 'email' && mailboxHealth && mailboxHealth.needsReconnect && (

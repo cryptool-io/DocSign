@@ -165,6 +165,7 @@ const serialize = (env) => ({
   signingOrder: env.SigningOrder,
   deliveryMode: env.DeliveryMode,
   requireVerification: env.RequireVerification,
+  keepCompletedCopy: env.KeepCompletedCopy,
   fromEmail: env.FromEmail,
   companyId: env.DocCompanyId,
   expiresAt: env.ExpiresAt,
@@ -275,6 +276,7 @@ exports.create = asyncHandler(async (req, res) => {
         SigningOrder: b.signingOrder || 'parallel',
         DeliveryMode: b.deliveryMode || 'email',
         RequireVerification: requireVerification,
+        KeepCompletedCopy: b.keepCompletedCopy !== false,
         FromEmail: sender.fromEmail,
         ExpiresAt: b.expiresAt || null
       },

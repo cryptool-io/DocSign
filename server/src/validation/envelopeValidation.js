@@ -36,6 +36,9 @@ const create = Joi.object({
   deliveryMode: Joi.string().valid('email', 'link').default('email'),
   // Whether signers must confirm an emailed one-time code before signing.
   requireVerification: Joi.boolean().default(true),
+  // Keep the signed PDF on the server after completion so the sender can download
+  // it later. Off = it's emailed to the parties and then dropped.
+  keepCompletedCopy: Joi.boolean().default(true),
   // The send-as address (must be one of the company's linked emails, if a company is set).
   fromEmail: Joi.string().email().max(254).lowercase().trim().allow('', null),
   expiresAt: Joi.date().iso().greater('now').allow(null),

@@ -30,6 +30,9 @@ module.exports = (sequelize, DataTypes) => {
       Message: { type: DataTypes.TEXT, allowNull: true },
       DeliveryMode: { type: DataTypes.ENUM('email', 'link'), allowNull: false, defaultValue: 'email' },
       RequireVerification: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
+      // Keep the signed PDF on the server after completion (downloadable), or drop
+      // it once emailed to the parties. Either way CompletedSha256 stays as proof.
+      KeepCompletedCopy: { type: DataTypes.BOOLEAN, allowNull: false, defaultValue: true },
       FromEmail: { type: DataTypes.STRING, allowNull: true },
       Status: {
         type: DataTypes.ENUM('draft', 'sent', 'partially_signed', 'completed', 'declined', 'voided', 'expired'),

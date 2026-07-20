@@ -66,8 +66,9 @@ async function purgeAbandonedDrafts() {
  * Remove the PDF bytes of a terminal envelope from storage. We keep only the
  * SHA-256 hashes + audit trail as tamper-evidence — never the file itself.
  *
- *  - The finished signed PDF is always dropped (all parties hold the emailed copy,
- *    and CompletedSha256 stays behind to prove any copy is authentic).
+ *  - The finished signed PDF is dropped unless the sender ticked "keep a copy"
+ *    (KeepCompletedCopy) at send time. When dropped, all parties still hold the
+ *    emailed copy, and CompletedSha256 stays behind to prove any copy is authentic.
  *  - The source PDF is dropped too, unless another consumer still needs the bytes:
  *    an active envelope, a DocSend share link, or a data-room item.
  *
@@ -87,7 +88,9 @@ async function purgeEnvelopeStorage(envelopeId) {
   let completed = false;
   let source = false;
 
-  if (env.CompletedFileKey) {
+  // The sender chose at send time whether to keep the signed PDF downloadable.
+  // When they did, it stays put — the source PDF below is still handled normally.
+  if (env.CompletedFileKey && !env.KeepCompletedCopy) {
     await storage.deleteObject(env.CompletedFileKey).catch(() => {});
     await env.update({ CompletedFileKey: null }); // CompletedSha256 remains as proof
     completed = true;

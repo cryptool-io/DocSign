@@ -124,6 +124,76 @@ function LinkModal({ doc, onClose }) {
   );
 }
 
+// Upload setup dialog: opened from the "Upload PDF" button. The sender answers
+// two questions — which workspace, and how they'll use the document — then picks
+// the file. This replaces the old inline row of selects + an easy-to-miss
+// "Encrypt" checkbox that silently made a document link-only (no email).
+function UploadModal({ companies, defaultWs, onClose, onPick }) {
+  const [ws, setWs] = useState(defaultWs || companies[0]?.id || '');
+  const [purpose, setPurpose] = useState('send'); // 'send' | 'encrypted' | 'device'
+  const fileRef = useRef();
+
+  const onFile = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    onPick(file, {
+      companyId: ws,
+      mode: purpose === 'device' ? 'sovereign' : 'stored',
+      encrypt: purpose === 'encrypted'
+    });
+  };
+
+  const option = (value, title, desc) => (
+    <label
+      className="checkbox"
+      style={{ alignItems: 'flex-start', marginBottom: 12, cursor: 'pointer', fontWeight: 400 }}
+    >
+      <input
+        type="radio"
+        name="upload-purpose"
+        checked={purpose === value}
+        onChange={() => setPurpose(value)}
+        style={{ marginTop: 3 }}
+      />
+      <span>
+        <strong>{title}</strong>
+        <span className="muted" style={{ display: 'block', fontSize: 13 }}>{desc}</span>
+      </span>
+    </label>
+  );
+
+  return (
+    <div className="public-center" style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.4)', zIndex: 100 }}>
+      <div className="card center-narrow" style={{ maxWidth: 500 }}>
+        <h1>Upload a PDF</h1>
+        <p className="muted mb">Choose how you&apos;ll use this document, then pick the file.</p>
+        {companies.length > 0 && (
+          <div className="field">
+            <label>Workspace</label>
+            <select className="input" value={ws} onChange={(e) => setWs(e.target.value)}>
+              <option value="" disabled>Choose a workspace…</option>
+              {companies.map((c) => (
+                <option key={c.id} value={c.id}>{c.name}</option>
+              ))}
+            </select>
+          </div>
+        )}
+        <div className="field">
+          <label>How will you use it?</label>
+          {option('send', 'Email or share link', 'Send for signature by email, or hand out a link. Best for most documents.')}
+          {option('encrypted', 'Encrypted — link only', "End-to-end encrypted. Can only be shared by a link, never email — the unlock key can't go in an email.")}
+          {option('device', 'Keep on my device', 'The PDF never leaves your computer — only a fingerprint is stored here.')}
+        </div>
+        <input ref={fileRef} type="file" accept="application/pdf" style={{ display: 'none' }} onChange={onFile} />
+        <div className="wrap-actions">
+          <button className="btn primary" onClick={() => fileRef.current?.click()}>Choose PDF…</button>
+          <button className="btn" onClick={onClose}>Cancel</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function Documents() {
   const [items, setItems] = useState(null);
   const [links, setLinks] = useState([]);
@@ -131,14 +201,8 @@ export default function Documents() {
   const [linkDoc, setLinkDoc] = useState(null);
   const [confirmAsk, setConfirmAsk] = useState(null); // { title, body, confirmLabel, onYes }
   const [uploading, setUploading] = useState(false);
-  const [uploadWs, setUploadWs] = useState('');
-  const [uploadMode, setUploadMode] = useState('stored'); // 'stored' | 'sovereign'
-  // Encryption is opt-in and OFF by default: an encrypted document can only be
-  // shared by link (its key can't ride in an email), which silently disables
-  // email delivery. Most senders email signing requests, so we don't encrypt
-  // unless they explicitly ask.
-  const [encryptUpload, setEncryptUpload] = useState(false);
-  const fileRef = useRef();
+  const [uploadWs, setUploadWs] = useState(''); // seeds the upload dialog's workspace
+  const [showUpload, setShowUpload] = useState(false);
   const attachRef = useRef();
   const [pendingAttach, setPendingAttach] = useState(null); // { doc, then }
   const toast = useToast();
@@ -211,15 +275,16 @@ export default function Documents() {
       }
     });
 
-  const upload = async (file) => {
+  // Options come from the upload dialog: { companyId, mode: 'stored'|'sovereign', encrypt }.
+  const upload = async (file, { companyId = uploadWs, mode = 'stored', encrypt = false } = {}) => {
     if (!file) return;
     if (file.type !== 'application/pdf') return toast('Please choose a PDF.', 'err');
-    if (companies.length > 0 && !uploadWs) return toast('Pick a workspace for this document first.', 'err');
+    if (companies.length > 0 && !companyId) return toast('Pick a workspace for this document first.', 'err');
     setUploading(true);
     try {
       // Sovereign: the PDF never leaves the device. We send only the fingerprint +
       // page count and create an overlay shell; bytes are attached transiently later.
-      if (uploadMode === 'sovereign') {
+      if (mode === 'sovereign') {
         const buf = await file.arrayBuffer();
         const fd = new FormData();
         fd.append('storageMode', 'sovereign');
@@ -227,20 +292,20 @@ export default function Documents() {
         fd.append('sha256', await sha256Hex(new Uint8Array(buf)));
         fd.append('pageCount', String(await countPages(buf)));
         fd.append('sizeBytes', String(file.size));
-        if (uploadWs) fd.append('companyId', uploadWs);
+        if (companyId) fd.append('companyId', companyId);
         await api.post('/documents', fd);
         toast('Added (sovereign — file stays on your device)');
         load();
         return;
       }
       const fd = new FormData();
-      // Only encrypt when the sender opted in. If they opted in but encryption
-      // isn't set up in this browser, stop rather than silently uploading it in
-      // the clear (or silently emailable when they wanted it locked).
-      const canEncrypt = encryptUpload ? await keystore.ensureUnlocked() : null;
-      if (encryptUpload && !canEncrypt) {
+      // Only encrypt when the sender chose "Encrypted" in the dialog. If they did
+      // but encryption isn't set up in this browser, stop rather than silently
+      // uploading it in the clear (or emailable when they wanted it locked).
+      const canEncrypt = encrypt ? await keystore.ensureUnlocked() : null;
+      if (encrypt && !canEncrypt) {
         return toast(
-          "Encryption isn't set up in this browser — set it up in Settings, or untick Encrypt to upload a normal (emailable) document.",
+          "Encryption isn't set up in this browser — set it up in Settings, or choose 'Email or share link' to upload a normal document.",
           'err'
         );
       }
@@ -258,7 +323,7 @@ export default function Documents() {
         fd.append('file', file);
         fd.append('name', file.name);
       }
-      if (uploadWs) fd.append('companyId', uploadWs);
+      if (companyId) fd.append('companyId', companyId);
       await api.post('/documents', fd);
       toast(canEncrypt ? 'Uploaded (encrypted)' : 'Uploaded');
       load();
@@ -266,7 +331,6 @@ export default function Documents() {
       toast(apiError(err), 'err');
     } finally {
       setUploading(false);
-      if (fileRef.current) fileRef.current.value = '';
     }
   };
 
@@ -317,47 +381,6 @@ export default function Documents() {
           </p>
         </div>
         <div className="flex" style={{ gap: 8, alignItems: 'center' }}>
-          {companies.length > 0 && (
-            <select
-              className="select"
-              style={{ maxWidth: 200 }}
-              value={uploadWs}
-              onChange={(e) => setUploadWs(e.target.value)}
-              title="Workspace the uploaded document belongs to"
-            >
-              <option value="" disabled>Choose a workspace…</option>
-              {companies.map((c) => (
-                <option key={c.id} value={c.id}>{c.name}</option>
-              ))}
-            </select>
-          )}
-          <select
-            className="select"
-            style={{ maxWidth: 220 }}
-            value={uploadMode}
-            onChange={(e) => setUploadMode(e.target.value)}
-            title="Stored: we keep the PDF (reusable, share links, data rooms). Sovereign: the PDF stays on your device — we keep only the overlay + fingerprint."
-          >
-            <option value="stored">Store with DocSign</option>
-            <option value="sovereign">🔒 Keep on my device</option>
-          </select>
-          {uploadMode === 'stored' && (
-            <label
-              className="checkbox"
-              style={{ margin: 0 }}
-              title="Encrypted documents can only be sent as a share link — email delivery isn't possible because the decryption key can't be put in an email."
-            >
-              <input type="checkbox" checked={encryptUpload} onChange={(e) => setEncryptUpload(e.target.checked)} />
-              Encrypt (link-only)
-            </label>
-          )}
-          <input
-            ref={fileRef}
-            type="file"
-            accept="application/pdf"
-            style={{ display: 'none' }}
-            onChange={(e) => upload(e.target.files[0])}
-          />
           <input
             ref={attachRef}
             type="file"
@@ -365,11 +388,24 @@ export default function Documents() {
             style={{ display: 'none' }}
             onChange={(e) => onAttachFile(e.target.files[0])}
           />
-          <button className="btn primary" disabled={uploading} onClick={() => fileRef.current?.click()}>
-            {uploading ? 'Uploading…' : uploadMode === 'sovereign' ? '+ Add PDF (device)' : '+ Upload PDF'}
+          <button className="btn primary" disabled={uploading} onClick={() => setShowUpload(true)}>
+            {uploading ? 'Uploading…' : '+ Upload PDF'}
           </button>
         </div>
       </div>
+
+      {showUpload && (
+        <UploadModal
+          companies={companies}
+          defaultWs={uploadWs}
+          onClose={() => setShowUpload(false)}
+          onPick={(file, opts) => {
+            setShowUpload(false);
+            setUploadWs(opts.companyId || '');
+            upload(file, opts);
+          }}
+        />
+      )}
 
       {items.length === 0 ? (
         <div className="empty">No documents yet. Upload a PDF to begin.</div>

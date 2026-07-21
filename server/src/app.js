@@ -93,9 +93,29 @@ app.use('/logos', express.static(logosDir, { maxAge: '7d', fallthrough: false })
 // --- Static SPA (built web/) ---------------------------------------------
 const webDist = path.resolve(__dirname, '../../web/dist');
 if (fs.existsSync(webDist)) {
-  app.use(express.static(webDist));
+  // Content-hashed build assets (…/assets/index-<hash>.js) get a new filename
+  // whenever they change, so they're safe to cache hard and forever.
+  app.use(
+    '/assets',
+    express.static(path.join(webDist, 'assets'), { immutable: true, maxAge: '1y' })
+  );
+  // Everything else, but never let the HTML entrypoint be cached: a stale
+  // index.html points the browser at an OLD JS bundle, so users keep running
+  // pre-deploy code until they hard-refresh (this once made an upload run the
+  // old auto-encrypt path and re-encrypt a document). no-cache forces a
+  // revalidate on every load; the hashed assets above still load instantly.
+  app.use(
+    express.static(webDist, {
+      setHeaders: (res, filePath) => {
+        if (filePath.endsWith('index.html')) res.setHeader('Cache-Control', 'no-cache');
+      }
+    })
+  );
   // SPA history fallback for anything that isn't an API route.
-  app.get(/^(?!\/api\/).*/, (_req, res) => res.sendFile(path.join(webDist, 'index.html')));
+  app.get(/^(?!\/api\/).*/, (_req, res) => {
+    res.setHeader('Cache-Control', 'no-cache');
+    res.sendFile(path.join(webDist, 'index.html'));
+  });
 }
 
 app.use('/api', notFoundHandler);

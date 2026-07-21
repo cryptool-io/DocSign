@@ -133,6 +133,11 @@ export default function Documents() {
   const [uploading, setUploading] = useState(false);
   const [uploadWs, setUploadWs] = useState('');
   const [uploadMode, setUploadMode] = useState('stored'); // 'stored' | 'sovereign'
+  // Encryption is opt-in and OFF by default: an encrypted document can only be
+  // shared by link (its key can't ride in an email), which silently disables
+  // email delivery. Most senders email signing requests, so we don't encrypt
+  // unless they explicitly ask.
+  const [encryptUpload, setEncryptUpload] = useState(false);
   const fileRef = useRef();
   const attachRef = useRef();
   const [pendingAttach, setPendingAttach] = useState(null); // { doc, then }
@@ -229,7 +234,16 @@ export default function Documents() {
         return;
       }
       const fd = new FormData();
-      const canEncrypt = await keystore.ensureUnlocked();
+      // Only encrypt when the sender opted in. If they opted in but encryption
+      // isn't set up in this browser, stop rather than silently uploading it in
+      // the clear (or silently emailable when they wanted it locked).
+      const canEncrypt = encryptUpload ? await keystore.ensureUnlocked() : null;
+      if (encryptUpload && !canEncrypt) {
+        return toast(
+          "Encryption isn't set up in this browser — set it up in Settings, or untick Encrypt to upload a normal (emailable) document.",
+          'err'
+        );
+      }
       if (canEncrypt) {
         // Encrypt in the browser; the server only ever sees ciphertext.
         const pageCount = await countPages(await file.arrayBuffer());
@@ -327,6 +341,16 @@ export default function Documents() {
             <option value="stored">Store with DocSign</option>
             <option value="sovereign">🔒 Keep on my device</option>
           </select>
+          {uploadMode === 'stored' && (
+            <label
+              className="checkbox"
+              style={{ margin: 0 }}
+              title="Encrypted documents can only be sent as a share link — email delivery isn't possible because the decryption key can't be put in an email."
+            >
+              <input type="checkbox" checked={encryptUpload} onChange={(e) => setEncryptUpload(e.target.checked)} />
+              Encrypt (link-only)
+            </label>
+          )}
           <input
             ref={fileRef}
             type="file"

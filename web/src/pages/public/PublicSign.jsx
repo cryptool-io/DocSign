@@ -4,6 +4,7 @@ import axios from 'axios';
 import { Document, Page } from '../../lib/pdf.js';
 import { decryptToBlob } from '../../lib/keystore.js';
 import { keyFromHash } from '../../lib/linkkey.js';
+import { formatDate } from '../../lib/dateformat.js';
 import { Spinner } from '../../lib/ui.jsx';
 
 const pub = axios.create({ baseURL: '/api' });
@@ -211,12 +212,12 @@ export default function PublicSign() {
         pub.get(`/sign/${token}/file`, { ...auth(), responseType: 'arraybuffer' })
       ]);
       setFields(f.data.data);
-      // Prefill date fields with today's date; the signer can still edit them.
-      const today = new Date().toLocaleDateString();
+      // Prefill date fields with today's date in the sender's chosen format; the
+      // signer can still edit manual ones.
       setValues((v) => {
         const next = { ...v };
         f.data.data.forEach((fld) => {
-          if (fld.mine && fld.type === 'date' && !next[fld.id]) next[fld.id] = today;
+          if (fld.mine && fld.type === 'date' && !next[fld.id]) next[fld.id] = formatDate(new Date(), fld.dateFormat);
         });
         return next;
       });
@@ -533,7 +534,7 @@ export default function PublicSign() {
                           )
                         ) : f.type === 'date' ? (
                           f.autoFill ? (
-                            <span style={{ fontSize: 12 }} title="Auto-filled with the date you sign">{new Date().toLocaleDateString()}</span>
+                            <span style={{ fontSize: f.fontSize || 12, fontFamily: fontFamilyFor(f.font) }} title="Auto-filled with the date you sign">{formatDate(new Date(), f.dateFormat)}</span>
                           ) : (
                             <input
                               className="input"

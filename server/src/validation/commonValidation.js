@@ -77,6 +77,7 @@ const field = Joi.object({
   fontSize: Joi.number().integer().min(6).max(72).allow(null),
   font: Joi.string().valid('Helvetica', 'Times', 'Courier').allow('', null),
   signatureMode: Joi.string().valid('any', 'type', 'draw').allow('', null),
+  dateFormat: Joi.string().max(20).allow('', null),
   label: Joi.string().max(160).allow('', null)
 });
 

@@ -36,6 +36,8 @@ module.exports = (sequelize, DataTypes) => {
       Font: { type: DataTypes.STRING, allowNull: true },
       // Signature fields: 'any' | 'type' | 'draw' (how the signer must sign).
       SignatureMode: { type: DataTypes.STRING, allowNull: true },
+      // Date fields: display format key (see services/dateFormat.js). Null = default.
+      DateFormat: { type: DataTypes.STRING, allowNull: true },
       Label: { type: DataTypes.STRING, allowNull: true },
       Value: { type: DataTypes.TEXT, allowNull: true }
     },

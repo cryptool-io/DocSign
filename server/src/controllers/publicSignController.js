@@ -21,6 +21,7 @@ const { purgeEnvelopeStorage } = require('../services/retention');
 const { flagConnectionError, clearConnectionError } = require('../services/mailboxHealth');
 const { signerOtpHtml, sendEmail, sendViaSmtp, envelopeCompletedHtml, signatureRequestHtml, systemCanSendFrom, APP_BASE_URL } = require('../services/email');
 const oauth = require('../services/emailOAuth');
+const { formatDate } = require('../services/dateFormat');
 const { resolveSenderIdentity, resolveSendingConnection, resolveBackupConnections } = require('./envelopeController');
 const { asyncHandler, notFound, badRequest, forbidden, unauthorized, tooMany, clientIp } = require('../utils/http');
 
@@ -335,6 +336,7 @@ exports.fields = asyncHandler(async (req, res) => {
         signatureMode: f.SignatureMode || 'any',
         fontSize: f.FontSize,
         font: f.Font,
+        dateFormat: f.DateFormat || null,
         label: f.Label,
         mine,
         value: mine ? undefined : value || '',
@@ -436,7 +438,6 @@ exports.submit = asyncHandler(async (req, res) => {
     throw badRequest('Please provide your signature.', 'signature_required');
   }
 
-  const nowIso = new Date().toISOString().slice(0, 10);
   const typedName = signatureType === 'typed' ? String(signatureData).slice(0, 120) : signer.Name;
   // Initials default to the capitals of the signer's name (e.g. "RMZ") when the
   // signer didn't supply their own. Typed renders as text; drawn stamps an image.
@@ -459,9 +460,11 @@ exports.submit = asyncHandler(async (req, res) => {
       } else if (f.Type === 'initials') {
         value = initialsType === 'drawn' ? null : typedInitials;
       } else if (f.Type === 'date') {
-        // Auto-fill dates are always stamped with the signing date; manual dates
-        // use the signer's entry, falling back to today.
-        value = f.AutoFill ? nowIso : value || nowIso;
+        // Auto-fill dates are stamped with the signing date in the sender's chosen
+        // format; manual dates use the signer's entry, falling back to today (also
+        // formatted). Formatting here means the PDF stamps the value verbatim.
+        const todayFormatted = formatDate(new Date(), f.DateFormat);
+        value = f.AutoFill ? todayFormatted : value || todayFormatted;
       } else if (f.Type === 'checkbox') {
         value = value ? 'X' : '';
       }

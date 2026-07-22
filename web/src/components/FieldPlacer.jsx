@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { ownerFileUrl } from '../lib/keystore.js';
 import { Document, Page } from '../lib/pdf.js';
 import { Spinner } from '../lib/ui.jsx';
+import { DATE_FORMAT_OPTIONS, DEFAULT_DATE_FORMAT } from '../lib/dateformat.js';
 
 export const FIELD_TYPES = [
   { type: 'signature', label: 'Signature' },
@@ -242,6 +243,7 @@ export default function FieldPlacer({ documentId, doc, fields, setFields, active
         signerEmail: activeSignerEmail || null,
         required: true,
         autoFill: activeType === 'date',
+        ...(activeType === 'date' ? { dateFormat: DEFAULT_DATE_FORMAT } : {}),
         label: '',
         ...(texty ? { fontSize: 11, font: 'Helvetica' } : {}),
         ...partial
@@ -352,10 +354,24 @@ export default function FieldPlacer({ documentId, doc, fields, setFields, active
                 </div>
               )}
               {selected.type === 'date' && (
-                <label className="checkbox" style={{ margin: 0 }}>
-                  <input type="checkbox" checked={selected.autoFill !== false} onChange={(e) => patchField(selected._id, { autoFill: e.target.checked })} />
-                  Auto-fill with the signing date
-                </label>
+                <>
+                  <label className="checkbox" style={{ margin: 0 }}>
+                    <input type="checkbox" checked={selected.autoFill !== false} onChange={(e) => patchField(selected._id, { autoFill: e.target.checked })} />
+                    Auto-fill with the signing date
+                  </label>
+                  <div className="field" style={{ marginBottom: 0, flex: 1, minWidth: 150 }}>
+                    <label>Date format</label>
+                    <select
+                      className="select"
+                      value={selected.dateFormat || DEFAULT_DATE_FORMAT}
+                      onChange={(e) => patchField(selected._id, { dateFormat: e.target.value })}
+                    >
+                      {DATE_FORMAT_OPTIONS.map((o) => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                </>
               )}
               <div className="field" style={{ marginBottom: 0, maxWidth: 130 }}>
                 <label>Box height (pt)</label>

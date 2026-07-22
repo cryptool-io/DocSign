@@ -37,6 +37,7 @@ const serialize = (tpl) => ({
     fontSize: f.FontSize,
     font: f.Font,
     signatureMode: f.SignatureMode,
+    dateFormat: f.DateFormat,
     label: f.Label
   }))
 });
@@ -89,6 +90,7 @@ const fieldRows = (templateId, fields) =>
     FontSize: f.fontSize || null,
     Font: f.font || null,
     SignatureMode: f.signatureMode || null,
+    DateFormat: f.dateFormat || null,
     Label: f.label || null
   }));
 

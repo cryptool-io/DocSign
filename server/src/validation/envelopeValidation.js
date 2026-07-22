@@ -13,6 +13,7 @@ const field = Joi.object({
   height: Joi.number().min(0.001).max(1).required(),
   required: Joi.boolean().default(true),
   autoFill: Joi.boolean().default(false),
+  dateFormat: Joi.string().max(20).allow('', null),
   label: Joi.string().max(160).allow('', null)
 });
 

@@ -6,6 +6,8 @@ import { ownerFileUrl } from '../lib/keystore.js';
 import { Document, Page } from '../lib/pdf.js';
 import { Spinner, useToast } from '../lib/ui.jsx';
 import { useStageWidth } from '../components/FieldPlacer.jsx';
+import { DATE_FORMAT_OPTIONS, DEFAULT_DATE_FORMAT } from '../lib/dateformat.js';
+import { fontFamilyFor, sampleValue, CURSIVE_FONT } from '../lib/fieldpreview.js';
 
 const FIELD_TYPES = [
   { type: 'signature', label: 'Signature' },
@@ -26,6 +28,11 @@ const heightForFont = (fs) => Math.min(0.15, Math.max(0.014, (fs * 1.55) / 792))
 
 function PageCanvas({ pageNumber, width, fields, activeType, colorFor, labelFor, onAdd, onMove, onResize, onRemove, onSelect, selectedId }) {
   const ref = useRef();
+  // Native page size (PDF points) → screen scale, so preview text matches the
+  // point size the PDF will stamp. Falls back to US-Letter until the page loads.
+  const [pageDims, setPageDims] = useState(null);
+  const ptToPx = width / (pageDims?.w || 612);
+  const pageHeightPx = width * ((pageDims?.h || 792) / (pageDims?.w || 612));
 
   const startResize = (e, field) => {
     e.stopPropagation();
@@ -87,11 +94,22 @@ function PageCanvas({ pageNumber, width, fields, activeType, colorFor, labelFor,
 
   return (
     <div className="pdf-page-wrap" ref={ref} onClick={onClick} style={{ cursor: activeType ? 'crosshair' : 'default' }}>
-      <Page pageNumber={pageNumber} width={width} renderTextLayer={false} renderAnnotationLayer={false} />
+      <Page
+        pageNumber={pageNumber}
+        width={width}
+        renderTextLayer={false}
+        renderAnnotationLayer={false}
+        onLoadSuccess={(page) => setPageDims({ w: page.originalWidth, h: page.originalHeight })}
+      />
       {fields
         .filter((f) => f.pageNumber === pageNumber)
         .map((f) => {
           const color = colorFor(f.signerRole);
+          const cursive = f.type === 'signature' || f.type === 'initials';
+          const boxHeightPx = f.height * pageHeightPx;
+          // Signatures/initials stamp as an image fit to the box; text/date use
+          // the field's point size scaled to the screen.
+          const previewPx = cursive ? Math.max(8, boxHeightPx * 0.62) : Math.max(6, (f.fontSize || 11) * ptToPx);
           return (
             <div
               key={f._id}
@@ -103,15 +121,48 @@ function PageCanvas({ pageNumber, width, fields, activeType, colorFor, labelFor,
                 top: `${f.y * 100}%`,
                 width: `${f.width * 100}%`,
                 height: `${f.height * 100}%`,
-                border: `2px solid ${color}`,
-                background: `${color}22`,
-                color,
+                border: `1px solid ${color}`,
+                background: `${color}14`,
+                // Left-align to match the stamped PDF (drawn at the box's left edge).
+                justifyContent: 'flex-start',
+                padding: '0 2px',
+                overflow: 'hidden',
                 outline: selectedId === f._id ? `2px solid ${color}` : 'none',
                 outlineOffset: 2
               }}
               title={`${labelFor(f)} · ${f.type}`}
             >
-              <span style={{ fontSize: 10, lineHeight: 1.1, overflow: 'hidden' }}>{f.label || f.type}</span>
+              {/* Field label chip, floated above so it never covers the preview. */}
+              <span
+                style={{
+                  position: 'absolute',
+                  top: -14,
+                  left: -1,
+                  fontSize: 9,
+                  lineHeight: '13px',
+                  fontWeight: 600,
+                  color: '#fff',
+                  background: color,
+                  padding: '0 4px',
+                  borderRadius: 3,
+                  whiteSpace: 'nowrap',
+                  pointerEvents: 'none'
+                }}
+              >
+                {(f.label || f.type)}{f.required === false ? '' : ' *'}
+              </span>
+              {/* WYSIWYG sample of the filled value. */}
+              <span
+                style={{
+                  fontSize: previewPx,
+                  fontFamily: cursive ? CURSIVE_FONT : fontFamilyFor(f.font),
+                  color: '#1a1a2e',
+                  whiteSpace: 'nowrap',
+                  lineHeight: 1
+                }}
+              >
+                {sampleValue(f)}
+              </span>
               <span className="del" onPointerDown={(e) => e.stopPropagation()} onClick={(e) => { e.stopPropagation(); onRemove(f._id); }}>×</span>
               <span
                 className="fp-resize"
@@ -239,6 +290,7 @@ export default function TemplateEditor() {
         signerRole: activeSigner,
         required: true,
         autoFill: f.type === 'date',
+        ...(f.type === 'date' ? { dateFormat: DEFAULT_DATE_FORMAT } : {}),
         label: '',
         ...(texty ? { fontSize: 11, font: 'Helvetica', height: heightForFont(11) } : {})
       }
@@ -278,6 +330,7 @@ export default function TemplateEditor() {
           height: f.height,
           required: f.required !== false,
           autoFill: f.type === 'date' ? f.autoFill === true : false,
+          dateFormat: f.type === 'date' ? f.dateFormat || DEFAULT_DATE_FORMAT : null,
           fontSize: TEXTY(f.type) ? f.fontSize || 11 : null,
           font: TEXTY(f.type) ? f.font || 'Helvetica' : null,
           signatureMode: f.type === 'signature' ? f.signatureMode || 'any' : null,
@@ -449,10 +502,24 @@ export default function TemplateEditor() {
                     </div>
                   )}
                   {selected.type === 'date' && (
-                    <label className="checkbox" style={{ margin: 0 }}>
-                      <input type="checkbox" checked={selected.autoFill !== false} onChange={(e) => patchField(selected._id, { autoFill: e.target.checked })} />
-                      Auto-fill with the signing date (locked)
-                    </label>
+                    <>
+                      <label className="checkbox" style={{ margin: 0 }}>
+                        <input type="checkbox" checked={selected.autoFill !== false} onChange={(e) => patchField(selected._id, { autoFill: e.target.checked })} />
+                        Auto-fill with the signing date (locked)
+                      </label>
+                      <div className="field" style={{ marginBottom: 0 }}>
+                        <label>Date format</label>
+                        <select
+                          className="select"
+                          value={selected.dateFormat || DEFAULT_DATE_FORMAT}
+                          onChange={(e) => patchField(selected._id, { dateFormat: e.target.value })}
+                        >
+                          {DATE_FORMAT_OPTIONS.map((o) => (
+                            <option key={o.value} value={o.value}>{o.label}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </>
                   )}
                   <label className="checkbox" style={{ margin: 0 }}>
                     <input type="checkbox" checked={selected.required !== false} onChange={(e) => patchField(selected._id, { required: e.target.checked })} />

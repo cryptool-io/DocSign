@@ -2,31 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { ownerFileUrl } from '../lib/keystore.js';
 import { Document, Page } from '../lib/pdf.js';
 import { Spinner } from '../lib/ui.jsx';
-import { DATE_FORMAT_OPTIONS, DEFAULT_DATE_FORMAT, formatDate } from '../lib/dateformat.js';
-
-// Map the stored font choice to a CSS family (mirrors the signing screen).
-const fontFamilyFor = (font) =>
-  font === 'Times' ? 'Georgia, "Times New Roman", serif' : font === 'Courier' ? '"Courier New", monospace' : 'Helvetica, Arial, sans-serif';
-
-// A stable sample so the sender previews exactly how a filled field will look —
-// real font, size and left-alignment — and can fix an oversized font or a too-
-// narrow box BEFORE sending, instead of discovering it in the signed PDF.
-const SAMPLE_DATE = new Date(2026, 6, 20); // 20 July 2026
-const sampleValue = (f) => {
-  switch (f.type) {
-    case 'date':
-      return formatDate(SAMPLE_DATE, f.dateFormat);
-    case 'signature':
-      return 'Jordan Lee';
-    case 'initials':
-      return 'JL';
-    case 'checkbox':
-      return '✔';
-    case 'text':
-    default:
-      return f.label ? f.label : 'Sample text';
-  }
-};
+import { DATE_FORMAT_OPTIONS, DEFAULT_DATE_FORMAT } from '../lib/dateformat.js';
+import { fontFamilyFor, sampleValue, CURSIVE_FONT } from '../lib/fieldpreview.js';
 
 export const FIELD_TYPES = [
   { type: 'signature', label: 'Signature' },
@@ -221,7 +198,7 @@ function PageOverlay({ pageNumber, pageWidth, fields, onAdd, onMove, onResize, o
               <span
                 style={{
                   fontSize: previewPx,
-                  fontFamily: cursive ? '"Segoe Script", "Brush Script MT", cursive' : fontFamilyFor(f.font),
+                  fontFamily: cursive ? CURSIVE_FONT : fontFamilyFor(f.font),
                   color: '#1a1a2e',
                   whiteSpace: 'nowrap',
                   lineHeight: 1

@@ -25,6 +25,9 @@ export default function PublicSign() {
   const [fields, setFields] = useState([]);
   const [pdfUrl, setPdfUrl] = useState(null);
   const [numPages, setNumPages] = useState(0);
+  // Native page size (PDF points) → screen scale, so field text renders at the
+  // same point size the PDF stamps (and matches the sender's editor preview).
+  const [pageDims, setPageDims] = useState(null);
   // Render the PDF at the container width (capped) so it fits phones. Fields are
   // percentage-positioned, so they scale with it.
   const [pageWidth, setPageWidth] = useState(760);
@@ -490,7 +493,13 @@ export default function PublicSign() {
           <Document file={pdfUrl} onLoadSuccess={({ numPages: n }) => setNumPages(n)} loading={<Spinner center />}>
             {Array.from({ length: numPages }, (_, i) => (
               <div key={i} className="pdf-page-wrap pdf-stage">
-                <Page pageNumber={i + 1} width={pageWidth} renderTextLayer={false} renderAnnotationLayer={false} />
+                <Page
+                  pageNumber={i + 1}
+                  width={pageWidth}
+                  renderTextLayer={false}
+                  renderAnnotationLayer={false}
+                  onLoadSuccess={(page) => setPageDims((d) => d || { w: page.originalWidth, h: page.originalHeight })}
+                />
                 {fields
                   .filter((f) => f.pageNumber === i + 1)
                   .map((f) => {
@@ -504,6 +513,9 @@ export default function PublicSign() {
                       ? values[f.id]
                       : !!values[f.id];
                     const isMissing = f.mine && showErrors && missingIds.has(f.id);
+                    // Draw text/date at the field's point size scaled to the screen,
+                    // so the signer sees the same size that gets stamped.
+                    const textPx = Math.max(6, (f.fontSize || 11) * (pageWidth / (pageDims?.w || 612)));
                     return (
                       <div
                         key={f.id}
@@ -516,7 +528,7 @@ export default function PublicSign() {
                           f.valueImage ? (
                             <img src={f.valueImage} alt="signature" style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain' }} />
                           ) : (
-                            <span style={{ fontSize: 12, fontFamily: f.type === 'signature' || f.type === 'initials' ? 'cursive' : 'inherit', overflow: 'hidden', whiteSpace: 'nowrap' }}>
+                            <span style={{ fontSize: f.type === 'signature' || f.type === 'initials' ? 14 : textPx, fontFamily: f.type === 'signature' || f.type === 'initials' ? 'cursive' : fontFamilyFor(f.font), overflow: 'hidden', whiteSpace: 'nowrap' }}>
                               {f.type === 'checkbox' ? (f.value ? '☑' : '') : f.value || ''}
                             </span>
                           )
@@ -534,11 +546,11 @@ export default function PublicSign() {
                           )
                         ) : f.type === 'date' ? (
                           f.autoFill ? (
-                            <span style={{ fontSize: f.fontSize || 12, fontFamily: fontFamilyFor(f.font) }} title="Auto-filled with the date you sign">{formatDate(new Date(), f.dateFormat)}</span>
+                            <span style={{ fontSize: textPx, fontFamily: fontFamilyFor(f.font) }} title="Auto-filled with the date you sign">{formatDate(new Date(), f.dateFormat)}</span>
                           ) : (
                             <input
                               className="input"
-                              style={{ padding: 2, width: '100%', height: '100%', fontSize: f.fontSize || 12, fontFamily: fontFamilyFor(f.font), textAlign: 'left', background: 'transparent', border: 'none' }}
+                              style={{ padding: 2, width: '100%', height: '100%', fontSize: textPx, fontFamily: fontFamilyFor(f.font), textAlign: 'left', background: 'transparent', border: 'none' }}
                               value={values[f.id] || ''}
                               onChange={(e) => setValues((v) => ({ ...v, [f.id]: e.target.value }))}
                               title="Signing date — you can edit it"
@@ -553,7 +565,7 @@ export default function PublicSign() {
                               padding: 2,
                               width: '100%',
                               height: '100%',
-                              fontSize: f.fontSize || 12,
+                              fontSize: textPx,
                               fontFamily: fontFamilyFor(f.font),
                               textAlign: 'left',
                               background: 'transparent',

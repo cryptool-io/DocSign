@@ -525,18 +525,29 @@ export default function TemplateEditor() {
                     <input type="checkbox" checked={selected.required !== false} onChange={(e) => patchField(selected._id, { required: e.target.checked })} />
                     Required
                   </label>
-                  <div className="field" style={{ marginBottom: 0, maxWidth: 130 }}>
-                    <label>Box height (pt)</label>
-                    <input
-                      type="number"
-                      className="input"
-                      min={8}
-                      max={200}
-                      value={Math.round((selected.height || 0.03) * 792)}
-                      onChange={(e) => patchField(selected._id, { height: Math.max(0.008, Math.min((Number(e.target.value) || 10) / 792, 0.5)) })}
-                    />
+                  <div className="field" style={{ marginBottom: 0 }}>
+                    <label>Position &amp; size (% of page)</label>
+                    <div className="flex" style={{ gap: 6 }}>
+                      {[
+                        { k: 'x', l: 'X', min: 0, max: 1 - (selected.width || 0) },
+                        { k: 'y', l: 'Y', min: 0, max: 1 - (selected.height || 0) },
+                        { k: 'width', l: 'W', min: 0.01, max: 1 - (selected.x || 0) },
+                        { k: 'height', l: 'H', min: 0.008, max: 1 - (selected.y || 0) }
+                      ].map(({ k, l, min, max }) => (
+                        <div key={k} className="field" style={{ marginBottom: 0, flex: 1 }}>
+                          <label style={{ fontSize: 11 }}>{l}</label>
+                          <input
+                            type="number"
+                            className="input"
+                            step={0.1}
+                            value={Number(((selected[k] || 0) * 100).toFixed(1))}
+                            onChange={(e) => patchField(selected._id, { [k]: Math.max(min, Math.min((Number(e.target.value) || 0) / 100, max)) })}
+                          />
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                  <div className="muted" style={{ fontSize: 12 }}>Tip: arrow keys nudge it 1px (Shift = 10px). Drag the corner to resize.</div>
+                  <div className="muted" style={{ fontSize: 12 }}>Tip: give several fields the same X to line them up. Arrow keys nudge; drag the corner to resize.</div>
                   <button className="btn sm danger" onClick={() => { removeField(selected._id); setSelectedId(null); }}>Remove field</button>
                 </div>
               ) : (

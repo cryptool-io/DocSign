@@ -537,7 +537,7 @@ export default function PublicSign() {
                           ) : (
                             <input
                               className="input"
-                              style={{ padding: 2, height: '100%', fontSize: f.fontSize || 12, fontFamily: fontFamilyFor(f.font), textAlign: 'center', background: 'transparent', border: 'none' }}
+                              style={{ padding: 2, width: '100%', height: '100%', fontSize: f.fontSize || 12, fontFamily: fontFamilyFor(f.font), textAlign: 'left', background: 'transparent', border: 'none' }}
                               value={values[f.id] || ''}
                               onChange={(e) => setValues((v) => ({ ...v, [f.id]: e.target.value }))}
                               title="Signing date — you can edit it"
@@ -550,9 +550,11 @@ export default function PublicSign() {
                             className="input"
                             style={{
                               padding: 2,
+                              width: '100%',
                               height: '100%',
                               fontSize: f.fontSize || 12,
                               fontFamily: fontFamilyFor(f.font),
+                              textAlign: 'left',
                               background: 'transparent',
                               border: 'none',
                               ...(isMissing ? { color: '#dc2626' } : {})

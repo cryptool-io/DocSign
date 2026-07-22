@@ -2,7 +2,31 @@ import { useEffect, useRef, useState } from 'react';
 import { ownerFileUrl } from '../lib/keystore.js';
 import { Document, Page } from '../lib/pdf.js';
 import { Spinner } from '../lib/ui.jsx';
-import { DATE_FORMAT_OPTIONS, DEFAULT_DATE_FORMAT } from '../lib/dateformat.js';
+import { DATE_FORMAT_OPTIONS, DEFAULT_DATE_FORMAT, formatDate } from '../lib/dateformat.js';
+
+// Map the stored font choice to a CSS family (mirrors the signing screen).
+const fontFamilyFor = (font) =>
+  font === 'Times' ? 'Georgia, "Times New Roman", serif' : font === 'Courier' ? '"Courier New", monospace' : 'Helvetica, Arial, sans-serif';
+
+// A stable sample so the sender previews exactly how a filled field will look —
+// real font, size and left-alignment — and can fix an oversized font or a too-
+// narrow box BEFORE sending, instead of discovering it in the signed PDF.
+const SAMPLE_DATE = new Date(2026, 6, 20); // 20 July 2026
+const sampleValue = (f) => {
+  switch (f.type) {
+    case 'date':
+      return formatDate(SAMPLE_DATE, f.dateFormat);
+    case 'signature':
+      return 'Jordan Lee';
+    case 'initials':
+      return 'JL';
+    case 'checkbox':
+      return '✔';
+    case 'text':
+    default:
+      return f.label ? f.label : 'Sample text';
+  }
+};
 
 export const FIELD_TYPES = [
   { type: 'signature', label: 'Signature' },
@@ -55,6 +79,11 @@ export function useStageWidth(max = MAX_PAGE_WIDTH) {
 
 function PageOverlay({ pageNumber, pageWidth, fields, onAdd, onMove, onResize, onRemove, onSelect, selectedId, activeType, colorFor }) {
   const ref = useRef();
+  // Native page size (PDF points) → screen scale, so preview text is drawn at the
+  // same point size the PDF will stamp. Falls back to US-Letter width until loaded.
+  const [pageDims, setPageDims] = useState(null);
+  const ptToPx = pageWidth / (pageDims?.w || 612);
+  const pageHeightPx = pageWidth * ((pageDims?.h || 792) / (pageDims?.w || 612));
 
   // Drag the bottom-right handle to resize (e.g. widen a box for long text).
   // Pointer events so this works with a mouse, a pen and a finger alike.
@@ -119,11 +148,25 @@ function PageOverlay({ pageNumber, pageWidth, fields, onAdd, onMove, onResize, o
 
   return (
     <div className="pdf-page-wrap pdf-stage" ref={ref} onClick={dropHere} style={{ cursor: activeType ? 'crosshair' : 'default' }}>
-      <Page pageNumber={pageNumber} width={pageWidth} renderTextLayer={false} renderAnnotationLayer={false} />
+      <Page
+        pageNumber={pageNumber}
+        width={pageWidth}
+        renderTextLayer={false}
+        renderAnnotationLayer={false}
+        onLoadSuccess={(page) => setPageDims({ w: page.originalWidth, h: page.originalHeight })}
+      />
       {fields
         .filter((f) => f.pageNumber === pageNumber)
         .map((f) => {
           const color = colorFor(f);
+          const boxHeightPx = f.height * pageHeightPx;
+          // Signatures/initials stamp as an image fit to the box, so size the
+          // preview to the box height; text/date use the field's point size.
+          const previewPx =
+            f.type === 'signature' || f.type === 'initials'
+              ? Math.max(8, boxHeightPx * 0.62)
+              : Math.max(6, (f.fontSize || 11) * ptToPx);
+          const cursive = f.type === 'signature' || f.type === 'initials';
           return (
             <div
               key={f._id}
@@ -137,24 +180,55 @@ function PageOverlay({ pageNumber, pageWidth, fields, onAdd, onMove, onResize, o
                 top: `${f.y * 100}%`,
                 width: `${f.width * 100}%`,
                 height: `${f.height * 100}%`,
-                border: `2px solid ${color}`,
-                background: `${color}22`,
-                borderRadius: 4,
+                border: `1px solid ${color}`,
+                background: `${color}14`,
+                borderRadius: 3,
                 cursor: 'move',
                 display: 'flex',
                 alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: 10,
-                fontWeight: 600,
-                color,
+                // Left-align to match the stamped PDF (drawn at the box's left edge).
+                justifyContent: 'flex-start',
+                padding: '0 2px',
                 userSelect: 'none',
-                overflow: 'visible',
+                // Clip the sample so a too-narrow box visibly cuts text off — a cue
+                // to widen it before sending.
+                overflow: 'hidden',
                 outline: selectedId === f._id ? `2px solid ${color}` : 'none',
                 outlineOffset: 2
               }}
               title={f.required === false ? `${f.label || f.type} (optional)` : `${f.label || f.type} (required)`}
             >
-              {(f.label || f.type)}{f.required === false ? '' : ' *'}
+              {/* Field label + signer colour, floated above so it never covers the preview. */}
+              <span
+                style={{
+                  position: 'absolute',
+                  top: -14,
+                  left: -1,
+                  fontSize: 9,
+                  lineHeight: '13px',
+                  fontWeight: 600,
+                  color: '#fff',
+                  background: color,
+                  padding: '0 4px',
+                  borderRadius: 3,
+                  whiteSpace: 'nowrap',
+                  pointerEvents: 'none'
+                }}
+              >
+                {(f.label || f.type)}{f.required === false ? '' : ' *'}
+              </span>
+              {/* WYSIWYG sample of the filled value. */}
+              <span
+                style={{
+                  fontSize: previewPx,
+                  fontFamily: cursive ? '"Segoe Script", "Brush Script MT", cursive' : fontFamilyFor(f.font),
+                  color: '#1a1a2e',
+                  whiteSpace: 'nowrap',
+                  lineHeight: 1
+                }}
+              >
+                {sampleValue(f)}
+              </span>
               <span
                 className="fp-del"
                 onPointerDown={(e) => e.stopPropagation()}
